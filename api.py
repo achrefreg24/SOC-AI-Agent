@@ -89,6 +89,7 @@ class AlertRequest(BaseModel):
     alert: AlertInfo
     threat_intel: Optional[ThreatIntel] = None
     correlation: Optional[CorrelationInfo] = None
+    blue_team_context: Optional[str] = None
 
 
 class AutomatedAction(BaseModel):
@@ -222,6 +223,11 @@ def qualifier_alerte(alert_data: AlertRequest, disable_ml: bool = False):
     # Injection du flag bypass si besoin
     if threat_found:
         system_prompt += "\n\n[INFO] THREAT INTEL A FLAGGE CETTE ALERTE ! Le pre-filtre ML a ete bypasse. Sois agressif dans ton jugement."
+
+    # Injection du contexte manuel de la Blue Team
+    if payload.get("blue_team_context"):
+        bt_context = payload["blue_team_context"]
+        system_prompt += f"\n\n[CONTEXTE BLUE TEAM] {bt_context}\nPrends OBLIGATOIREMENT en compte cette consigne de la Blue Team dans ton analyse et ta decision finale."
 
     result = soc_agent.qualify_alert(payload, system_prompt, history)
     
