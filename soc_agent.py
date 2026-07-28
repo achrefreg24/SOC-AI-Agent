@@ -149,8 +149,16 @@ def qualify_alert(alert_data: dict, system_prompt: str, history: dict = None) ->
         hist_text = f"\n\n[CONTEXTE HISTORIQUE] L'IP source de cette alerte a deja attaque {times} fois dans les dernieres 24h ! La derniere contre-mesure executee etait : {last_action}. S'il s'agit d'une attaque persistante, sois agressif dans ta reponse."
         system_prompt += hist_text
         
-    # Retrieve RAG Playbook Context
-    desc = alert_data.get("alert", {}).get("description", "")
+    # Retrieve RAG Playbook Context (cherche la description dans tous les formats possibles)
+    desc = (
+        alert_data.get("wazuh_alert", {}).get("description", "") or
+        alert_data.get("wazuh_alert", {}).get("full_raw", {}).get("rule", {}).get("description", "") or
+        alert_data.get("wazuh_alert", {}).get("full_raw", {}).get("full_log", "") or
+        alert_data.get("alert", {}).get("rule_desc", "") or
+        alert_data.get("alert", {}).get("description", "") or
+        alert_data.get("description", "") or
+        ""
+    )
     rag_context = get_rag_context(desc)
     if rag_context:
         system_prompt += rag_context
