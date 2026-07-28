@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SOC AI - Quick Start Guide</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; background: #0f172a; color: #f8fafc; line-height: 1.6; margin: 0; padding: 40px; }
+    .container { max-width: 800px; margin: 0 auto; background: #1e293b; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+    h1 { color: #38bdf8; font-size: 28px; margin-top: 0; border-bottom: 2px solid #334155; padding-bottom: 10px; }
+    h2 { color: #e2e8f0; font-size: 20px; margin-top: 30px; }
+    p { color: #cbd5e1; }
+    .box { background: #334155; padding: 15px 20px; border-radius: 8px; margin: 15px 0; border-left: 4px solid #38bdf8; }
+    .box-red { border-left-color: #ef4444; }
+    .box-green { border-left-color: #22c55e; }
+    code { background: #0f172a; padding: 3px 6px; border-radius: 4px; color: #f472b6; font-family: monospace; font-size: 14px; }
+    pre { background: #0f172a; padding: 15px; border-radius: 8px; overflow-x: auto; color: #a5b4fc; font-size: 14px; border: 1px solid #334155; }
+    .btn { background: #38bdf8; color: #0f172a; padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; float: right; font-size: 12px; }
+    .btn:hover { background: #7dd3fc; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🛡️ Active Defender SOC AI</h1>
+    <p>Welcome! This guide is designed to be simple and straight to the point. Here is exactly how to connect to the AI and test it.</p>
+
+    <!-- 1. HOW IT WORKS -->
+    <h2>1. How the Dual-Engine Works</h2>
+    <div class="box box-green">
+      <strong>Engine 1 (Fast Filter):</strong> Analyzes the text and time of the alert. If it's 100% sure it's a False Positive, it drops it instantly (0.1s).
+    </div>
+    <div class="box box-red">
+      <strong>Engine 2 (LLaMA 3 Brain):</strong> If Engine 1 is unsure, or if Threat Intel flags the IP, this engine takes over. It reads the IP history, checks SOC playbooks (RAG), and makes a logical decision.
+    </div>
+
+    <!-- 2. CONNECTING -->
+    <h2>2. Connecting via n8n</h2>
+    <p>Use an <strong>HTTP Request Node</strong> in n8n with these settings:</p>
+    <ul>
+      <li><strong>Method:</strong> POST</li>
+      <li><strong>URL:</strong> <code>http://100.64.X.X:8000/qualifier-alerte</code> (Replace with the AI's Tailscale IP)</li>
+    </ul>
+
+    <!-- 3. JSON FORMATS -->
+    <h2>3. The JSON Formats</h2>
+    
+    <p><strong>What you send to the AI:</strong></p>
+    <pre><button class="btn" onclick="copy(this)">Copy</button>{
+  "alert": {
+    "id": 1234,
+    "description": "{{ $json.wazuh_description }}",
+    "level": {{ $json.rule_level }},
+    "src_ip": "{{ $json.src_ip }}",
+    "timestamp": "{{ $json.timestamp }}"
+  },
+  "threat_intel": {
+    "misp": { "found": {{ $json.misp_found }} },
+    "opencti": { "found": {{ $json.opencti_found }} }
+  }
+}</pre>
+
+    <p><strong>What the AI replies with:</strong></p>
+    <pre><button class="btn" onclick="copy(this)">Copy</button>{
+  "analysis_context": "L'alerte mentionne un SSH Brute Force. L'IP source est...",
+  "reasoning": "L'attaque se produit en dehors des heures de travail...",
+  "classification": "Critique",
+  "automated_action": {
+    "execute": true,
+    "action_type": "firewall-drop",
+    "target": "203.0.113.50"
+  }
+}</pre>
+
+    <!-- 4. TESTING & DEBUGGING -->
+    <h2>4. Testing & Debugging</h2>
+    <p>To run the built-in tests, open a terminal on the AI machine and type:</p>
+    <code>python stress_test.py</code>
+    
+    <div class="box">
+      <strong>💡 Pro Tip: Testing the ML Toggle</strong><br>
+      If you want to bypass Engine 1 completely and force LLaMA 3 to read every single alert, open <code>stress_test.py</code> and change <code>USE_ML_ENGINE = True</code> to <code>False</code>.
+    </div>
+    <p>You can also do this in n8n by adding <code>?disable_ml=true</code> to the end of the URL.</p>
+
+  </div>
+
+  <script>
+    function copy(btn) {
+      const code = btn.nextSibling.nodeValue || btn.parentElement.innerText.replace('Copy','');
+      navigator.clipboard.writeText(code.trim());
+      btn.innerText = "Copied!";
+      setTimeout(() => btn.innerText = "Copy", 2000);
+    }
+  </script>
+</body>
+</html>

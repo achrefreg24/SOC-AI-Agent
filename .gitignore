@@ -1,0 +1,28 @@
+# ============================================================
+# .gitignore — SOC AI Agent
+# Do NOT push sensitive data or local environment files.
+# ============================================================
+
+# 1. CSV datasets — too large and may contain sensitive info
+*.csv
+dataset_*.csv
+
+# 2. Live memory database — contains real attack history from your tests
+soc_memory.db
+
+# 3. Python cache — never push these
+__pycache__/
+*.pyc
+*.pyo
+
+# 4. Debug/scratch scripts — not part of the final project
+debug_engine1.py
+
+# 5. Virtual environments (if you ever create one)
+venv/
+.venv/
+env/
+
+# 6. OS files
+.DS_Store
+Thumbs.db
