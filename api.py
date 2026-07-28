@@ -145,6 +145,12 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
     except Exception:
         raise HTTPException(status_code=400, detail="Le body doit etre du JSON valide.")
 
+    # FIX 1: Si le Blue Team envoie un tableau [{}], on prend le premier element
+    if isinstance(payload, list):
+        if len(payload) == 0:
+            raise HTTPException(status_code=400, detail="Le tableau JSON est vide.")
+        payload = payload[0]
+
     # --- Extraction intelligente des champs cles ---
     description = extract_field(payload, [
         "wazuh_alert.description",
@@ -183,7 +189,35 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
     # --- Detection Threat Intel (BYPASS RULE) ---
     threat_found = False
 
-    # Format Blue Team natif (opencti / misp top-level)
+    # FIX 2: Format Blue Team reel - cles sous "threat_intelligence"
+    threat_intel_block = payload.get("threat_intelligence", {})
+    if isinstance(threat_intel_block, dict):
+        ti_misp = threat_intel_block.get("misp", {})
+        if isinstance(ti_misp, dict) and (ti_misp.get("found") or ti_misp.get("matched")):
+            threat_found = True
+        ti_opencti = threat_intel_block.get("opencti", {})
+        if isinstance(ti_opencti, dict):
+            if ti_opencti.get("found"):
+                threat_found = True
+            # FIX 3: OpenCTI dit found=false mais a des edges avec score eleve
+            edges = []
+            try:
+                edges = ti_opencti.get("full_response", {}).get("data", {}).get("stixCyberObservables", {}).get("edges", [])
+            except Exception:
+                pass
+            for edge in edges:
+                score = edge.get("node", {}).get("x_opencti_score", 0)
+                if score and int(score) >= 70:
+                    threat_found = True
+                    break
+
+    # Format avec correlation_summary
+    correlation = payload.get("correlation_summary", {})
+    if isinstance(correlation, dict):
+        if correlation.get("preliminary_verdict") == "intel_found":
+            threat_found = True
+
+    # Format ancien (opencti / misp top-level)
     opencti = payload.get("opencti", {})
     if isinstance(opencti, dict) and opencti.get("found"):
         threat_found = True
@@ -193,9 +227,23 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
         if misp.get("matched") or misp.get("found"):
             threat_found = True
 
-    correlation = payload.get("correlation_summary", {})
-    if isinstance(correlation, dict):
-        if correlation.get("preliminary_verdict") == "intel_found":
+    # Format ancien (enrichment block)
+    enrichment = payload.get("enrichment", {})
+    if isinstance(enrichment, dict):
+        if enrichment.get("known_in_opencti"):
+            threat_found = True
+        signals = enrichment.get("signals", {})
+        if isinstance(signals, dict) and (signals.get("is_malicious") or signals.get("is_known_ioc")):
+            threat_found = True
+
+    # Format ancien (threat_intel block)
+    threat_intel = payload.get("threat_intel", {})
+    if isinstance(threat_intel, dict):
+        ti_opencti2 = threat_intel.get("opencti", {})
+        if isinstance(ti_opencti2, dict) and ti_opencti2.get("found"):
+            threat_found = True
+        ti_misp2 = threat_intel.get("misp", {})
+        if isinstance(ti_misp2, dict) and ti_misp2.get("found"):
             threat_found = True
 
     # Format ancien (enrichment block)
