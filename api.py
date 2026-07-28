@@ -14,6 +14,7 @@ from pathlib import Path
 import pickle
 from datetime import datetime
 import time
+import json
 
 import soc_agent
 import database
@@ -60,35 +61,40 @@ def get_system_prompt() -> str:
 
 
 # --- Schemas de requete/reponse ---
-class AlertInfo(BaseModel):
-    id: int
-    description: str
+class BlueTeamAlert(BaseModel):
+    rule_id: Optional[str] = None
+    rule_desc: str
     level: int
-    src_ip: Optional[str] = None
+    agent: Optional[str] = None
+    agent_ip: Optional[str] = None
+    srcip: Optional[str] = None
+    dstip: Optional[str] = None
+    proto: Optional[str] = None
     timestamp: str
+    full_log: Optional[str] = None
 
-class MispIntel(BaseModel):
-    found: bool
-    matches: List[Any] = []
+class BlueTeamThreatContext(BaseModel):
+    actors: List[str] = []
+    malwares: List[str] = []
+    ttps: List[str] = []
 
-class OpenCtiIntel(BaseModel):
-    found: bool
-    error: Optional[str] = None
-    matches: List[Dict[str, Any]] = []
+class BlueTeamSignals(BaseModel):
+    is_known_ioc: bool = False
+    is_malicious: bool = False
+    is_private_srcip: bool = False
+    has_threat_actor: bool = False
+    has_mitre_ttp: bool = False
 
-class ThreatIntel(BaseModel):
-    misp: Optional[MispIntel] = None
-    opencti: Optional[OpenCtiIntel] = None
-
-class CorrelationInfo(BaseModel):
-    total_sources_matched: int
-    preliminary_verdict: str
-    confidence: str
+class BlueTeamEnrichment(BaseModel):
+    known_in_opencti: bool = False
+    iocs: List[Any] = []
+    misp: Optional[Dict[str, Any]] = None
+    threat_context: Optional[BlueTeamThreatContext] = None
+    signals: Optional[BlueTeamSignals] = None
 
 class AlertRequest(BaseModel):
-    alert: AlertInfo
-    threat_intel: Optional[ThreatIntel] = None
-    correlation: Optional[CorrelationInfo] = None
+    alert: BlueTeamAlert
+    enrichment: Optional[BlueTeamEnrichment] = None
     blue_team_context: Optional[str] = None
 
 
@@ -146,9 +152,12 @@ def qualifier_alerte(alert_data: AlertRequest, disable_ml: bool = False):
     
     # 1. Verification Threat Intel (BYPASS RULE)
     threat_found = False
-    if payload.get("threat_intel"):
-        ti = payload["threat_intel"]
-        if (ti.get("opencti") and ti["opencti"].get("found")) or (ti.get("misp") and ti["misp"].get("found")):
+    if payload.get("enrichment"):
+        enrichment = payload["enrichment"]
+        signals = enrichment.get("signals", {})
+        if enrichment.get("known_in_opencti") or signals.get("is_malicious") or signals.get("is_known_ioc"):
+            threat_found = True
+        if enrichment.get("misp") and enrichment["misp"].get("matched"):
             threat_found = True
 
     # 2. Engine 1 : ML Filter (RandomForest)
@@ -163,7 +172,7 @@ def qualifier_alerte(alert_data: AlertRequest, disable_ml: bool = False):
             is_weekend = 1 if day_of_week >= 5 else 0
             
             # Extraction de la vraie frequence d'attaque depuis SQLite
-            ip_str = alert_data.alert.src_ip or ""
+            ip_str = alert_data.alert.srcip or ""
             alerts_per_minute = database.get_alerts_last_minute(ip_str)
             
             numeric_features = pd.DataFrame([{
@@ -177,7 +186,7 @@ def qualifier_alerte(alert_data: AlertRequest, disable_ml: bool = False):
 
             # If NLP model is available, add TF-IDF text features
             if rf_tfidf is not None:
-                text_features = rf_tfidf.transform([alert_data.alert.description])
+                text_features = rf_tfidf.transform([alert_data.alert.rule_desc])
                 X = hstack([csr_matrix(numeric_features.values), text_features])
             else:
                 # Fallback: old model needs src_ip_encoded and dst_ip_encoded
@@ -205,8 +214,8 @@ def qualifier_alerte(alert_data: AlertRequest, disable_ml: bool = False):
                 
                 # Save decision
                 database.save_alert(
-                    src_ip=alert_data.alert.src_ip,
-                    description=alert_data.alert.description,
+                    src_ip=alert_data.alert.srcip,
+                    description=alert_data.alert.rule_desc,
                     classification=result["classification"],
                     attack_type=result["attack_type"],
                     action_executed=None
@@ -218,7 +227,7 @@ def qualifier_alerte(alert_data: AlertRequest, disable_ml: bool = False):
 
     # 3. Engine 2 : LLaMA 3 + Memory (Escalade)
     # Fetch historical context for this IP
-    history = database.get_ip_history(alert_data.alert.src_ip)
+    history = database.get_ip_history(alert_data.alert.srcip)
     
     # Injection du flag bypass si besoin
     if threat_found:
@@ -229,12 +238,16 @@ def qualifier_alerte(alert_data: AlertRequest, disable_ml: bool = False):
         bt_context = payload["blue_team_context"]
         system_prompt += f"\n\n[CONTEXTE BLUE TEAM] {bt_context}\nPrends OBLIGATOIREMENT en compte cette consigne de la Blue Team dans ton analyse et ta decision finale."
 
+    # Injection native de l'Enrichissement complet (Threat Intel massif)
+    if payload.get("enrichment"):
+        system_prompt += f"\n\n[ENRICHISSEMENT THREAT INTEL (JSON)]\n{json.dumps(payload['enrichment'], indent=2)}\nUtilise toutes ces donnees (Threat Actors, Malwares, TTPs) pour affiner ton analyse."
+
     result = soc_agent.qualify_alert(payload, system_prompt, history)
     
     # Save the decision into memory
     database.save_alert(
-        src_ip=alert_data.alert.src_ip,
-        description=alert_data.alert.description,
+        src_ip=alert_data.alert.srcip,
+        description=alert_data.alert.rule_desc,
         classification=result.get("classification", "Erreur"),
         attack_type=result.get("attack_type", "Inconnu"),
         action_executed=result.get("automated_action", {}).get("action_type")
