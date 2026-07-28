@@ -171,7 +171,7 @@ def qualify_alert(alert_data: dict, system_prompt: str, history: dict = None) ->
     }
 
     try:
-        r = requests.post(OLLAMA_URL, json=payload, timeout=120)
+        r = requests.post(OLLAMA_URL, json=payload, timeout=300)
         r.raise_for_status()
         raw_answer = r.json()["message"]["content"].strip()
         parsed = json.loads(raw_answer)

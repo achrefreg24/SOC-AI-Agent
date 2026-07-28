@@ -60,44 +60,8 @@ def get_system_prompt() -> str:
     return _system_prompt_cache
 
 
-# --- Schemas de requete/reponse ---
-class BlueTeamAlert(BaseModel):
-    rule_id: Optional[str] = None
-    rule_desc: str
-    level: int
-    agent: Optional[str] = None
-    agent_ip: Optional[str] = None
-    srcip: Optional[str] = None
-    dstip: Optional[str] = None
-    proto: Optional[str] = None
-    timestamp: str
-    full_log: Optional[str] = None
 
-class BlueTeamThreatContext(BaseModel):
-    actors: List[str] = []
-    malwares: List[str] = []
-    ttps: List[str] = []
-
-class BlueTeamSignals(BaseModel):
-    is_known_ioc: bool = False
-    is_malicious: bool = False
-    is_private_srcip: bool = False
-    has_threat_actor: bool = False
-    has_mitre_ttp: bool = False
-
-class BlueTeamEnrichment(BaseModel):
-    known_in_opencti: bool = False
-    iocs: List[Any] = []
-    misp: Optional[Dict[str, Any]] = None
-    threat_context: Optional[BlueTeamThreatContext] = None
-    signals: Optional[BlueTeamSignals] = None
-
-class AlertRequest(BaseModel):
-    alert: BlueTeamAlert
-    enrichment: Optional[BlueTeamEnrichment] = None
-    blue_team_context: Optional[str] = None
-
-
+# --- Schema de reponse uniquement (pas de schema de requete - on accepte TOUT) ---
 class AutomatedAction(BaseModel):
     execute: bool
     action_type: Optional[str] = None
@@ -114,13 +78,33 @@ class AlertResponse(BaseModel):
     automated_action: AutomatedAction
 
 
+def extract_field(data: dict, candidates: list, default=None):
+    """
+    Cherche un champ dans un dictionnaire JSON imbriqué.
+    Essaie chaque chemin dans 'candidates' et retourne la premiere valeur trouvee.
+    Exemples de chemins: "wazuh_alert.description", "alert.rule_desc", "description"
+    """
+    for path in candidates:
+        keys = path.split(".")
+        val = data
+        for k in keys:
+            if isinstance(val, dict) and k in val:
+                val = val[k]
+            else:
+                val = None
+                break
+        if val is not None:
+            return val
+    return default
+
+
 # --- Endpoints ---
 @app.get("/")
 def root():
     return {
         "message": "Agent IA SOC - API Dual-Engine active",
         "endpoints": {
-            "POST /qualifier-alerte": "Classifie une alerte Wazuh",
+            "POST /qualifier-alerte": "Classifie une alerte Wazuh (accepte tout format JSON)",
             "GET /health": "Verifie la sante des moteurs",
         },
     }
@@ -143,40 +127,117 @@ def health():
     }
 
 
+from fastapi import Request
+
 @app.post("/qualifier-alerte", response_model=AlertResponse)
-def qualifier_alerte(alert_data: AlertRequest, disable_ml: bool = False):
+async def qualifier_alerte(request: Request, disable_ml: bool = False):
+    """
+    Accepte N'IMPORTE QUEL format JSON.
+    Extrait intelligemment les champs necessaires pour Engine 1.
+    Envoie la TOTALITE du JSON brut a Engine 2 (Ollama / LLaMA 3).
+    """
     t0 = time.time()
     system_prompt = get_system_prompt()
-    # Support model_dump (Pydantic v2) or dict (Pydantic v1)
-    payload = alert_data.model_dump() if hasattr(alert_data, "model_dump") else alert_data.dict()
-    
-    # 1. Verification Threat Intel (BYPASS RULE)
+
+    # Lire le body JSON brut (aucun schema impose)
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Le body doit etre du JSON valide.")
+
+    # --- Extraction intelligente des champs cles ---
+    description = extract_field(payload, [
+        "wazuh_alert.description",
+        "wazuh_alert.full_raw.rule.description",
+        "alert.rule_desc",
+        "alert.description",
+        "description",
+    ], default="")
+
+    src_ip = extract_field(payload, [
+        "wazuh_alert.src_ip",
+        "wazuh_alert.full_raw.data.srcip",
+        "alert.srcip",
+        "alert.src_ip",
+        "src_ip",
+    ], default=None)
+
+    timestamp_str = extract_field(payload, [
+        "wazuh_alert.timestamp",
+        "wazuh_alert.full_raw.timestamp",
+        "alert.timestamp",
+        "timestamp",
+    ], default="")
+
+    level = extract_field(payload, [
+        "wazuh_alert.level",
+        "wazuh_alert.full_raw.rule.level",
+        "alert.level",
+        "level",
+    ], default=5)
+    try:
+        level = int(level)
+    except (ValueError, TypeError):
+        level = 5
+
+    # --- Detection Threat Intel (BYPASS RULE) ---
     threat_found = False
-    if payload.get("enrichment"):
-        enrichment = payload["enrichment"]
-        signals = enrichment.get("signals", {})
-        if enrichment.get("known_in_opencti") or signals.get("is_malicious") or signals.get("is_known_ioc"):
-            threat_found = True
-        if enrichment.get("misp") and enrichment["misp"].get("matched"):
+
+    # Format Blue Team natif (opencti / misp top-level)
+    opencti = payload.get("opencti", {})
+    if isinstance(opencti, dict) and opencti.get("found"):
+        threat_found = True
+
+    misp = payload.get("misp", {})
+    if isinstance(misp, dict):
+        if misp.get("matched") or misp.get("found"):
             threat_found = True
 
-    # 2. Engine 1 : ML Filter (RandomForest)
-    # Skip if ML is disabled via query param (for testing/demos)
+    correlation = payload.get("correlation_summary", {})
+    if isinstance(correlation, dict):
+        if correlation.get("preliminary_verdict") == "intel_found":
+            threat_found = True
+
+    # Format ancien (enrichment block)
+    enrichment = payload.get("enrichment", {})
+    if isinstance(enrichment, dict):
+        if enrichment.get("known_in_opencti"):
+            threat_found = True
+        signals = enrichment.get("signals", {})
+        if isinstance(signals, dict) and (signals.get("is_malicious") or signals.get("is_known_ioc")):
+            threat_found = True
+        misp_enr = enrichment.get("misp", {})
+        if isinstance(misp_enr, dict) and misp_enr.get("matched"):
+            threat_found = True
+
+    # Format ancien (threat_intel block)
+    threat_intel = payload.get("threat_intel", {})
+    if isinstance(threat_intel, dict):
+        ti_opencti = threat_intel.get("opencti", {})
+        if isinstance(ti_opencti, dict) and ti_opencti.get("found"):
+            threat_found = True
+        ti_misp = threat_intel.get("misp", {})
+        if isinstance(ti_misp, dict) and ti_misp.get("found"):
+            threat_found = True
+
+    # --- Engine 1 : ML Filter (RandomForest) ---
     if not threat_found and not disable_ml and rf_model is not None and rf_le is not None:
         try:
-            # Extraction des vraies features depuis le timestamp (ex: "2026-07-19T01:00:00Z")
-            dt = datetime.fromisoformat(alert_data.alert.timestamp.replace("Z", "+00:00"))
+            ts_clean = timestamp_str.replace("Z", "+00:00")
+            # Handle +0000 format (no colon)
+            if ts_clean.endswith("+0000"):
+                ts_clean = ts_clean[:-5] + "+00:00"
+            dt = datetime.fromisoformat(ts_clean)
             hour = dt.hour
             day_of_week = dt.weekday()
             month = dt.month
             is_weekend = 1 if day_of_week >= 5 else 0
-            
-            # Extraction de la vraie frequence d'attaque depuis SQLite
-            ip_str = alert_data.alert.srcip or ""
+
+            ip_str = src_ip or ""
             alerts_per_minute = database.get_alerts_last_minute(ip_str)
-            
+
             numeric_features = pd.DataFrame([{
-                "rule_level": alert_data.alert.level,
+                "rule_level": level,
                 "hour": hour,
                 "day_of_week": day_of_week,
                 "month": month,
@@ -184,20 +245,18 @@ def qualifier_alerte(alert_data: AlertRequest, disable_ml: bool = False):
                 "alerts_per_minute": alerts_per_minute,
             }])
 
-            # If NLP model is available, add TF-IDF text features
             if rf_tfidf is not None:
-                text_features = rf_tfidf.transform([alert_data.alert.rule_desc])
+                text_features = rf_tfidf.transform([description])
                 X = hstack([csr_matrix(numeric_features.values), text_features])
             else:
-                # Fallback: old model needs src_ip_encoded and dst_ip_encoded
                 numeric_features["src_ip_encoded"] = 0
                 numeric_features["dst_ip_encoded"] = 0
                 X = numeric_features
-            
+
             rf_pred   = rf_model.predict(X)
             rf_classe = rf_le.inverse_transform(rf_pred)[0]
             rf_proba  = max(rf_model.predict_proba(X)[0]) * 100
-            
+
             # FILTRE SUPERSONIQUE : Si le ML est certain que c'est benin
             if rf_classe in ["Faux positif", "Informatif"] and rf_proba >= 90.0:
                 elapsed = time.time() - t0
@@ -211,46 +270,43 @@ def qualifier_alerte(alert_data: AlertRequest, disable_ml: bool = False):
                     "recommandation": "Aucune action requise. Ignore par le pre-filtre IA.",
                     "automated_action": {"execute": False, "action_type": None, "target": None}
                 }
-                
-                # Save decision
+
                 database.save_alert(
-                    src_ip=alert_data.alert.srcip,
-                    description=alert_data.alert.rule_desc,
+                    src_ip=src_ip,
+                    description=description,
                     classification=result["classification"],
                     attack_type=result["attack_type"],
                     action_executed=None
                 )
                 return result
-                
+
         except Exception as e:
             print(f"⚠️ Erreur Engine 1 : {e}")
 
-    # 3. Engine 2 : LLaMA 3 + Memory (Escalade)
-    # Fetch historical context for this IP
-    history = database.get_ip_history(alert_data.alert.srcip)
-    
-    # Injection du flag bypass si besoin
+    # --- Engine 2 : LLaMA 3 + Memory (Escalade) ---
+    history = database.get_ip_history(src_ip)
+
     if threat_found:
         system_prompt += "\n\n[INFO] THREAT INTEL A FLAGGE CETTE ALERTE ! Le pre-filtre ML a ete bypasse. Sois agressif dans ton jugement."
 
-    # Injection du contexte manuel de la Blue Team
-    if payload.get("blue_team_context"):
-        bt_context = payload["blue_team_context"]
+    # Injection du contexte Blue Team (si present)
+    bt_context = payload.get("blue_team_context") or extract_field(payload, ["analysis_request.task"], default=None)
+    if bt_context:
         system_prompt += f"\n\n[CONTEXTE BLUE TEAM] {bt_context}\nPrends OBLIGATOIREMENT en compte cette consigne de la Blue Team dans ton analyse et ta decision finale."
 
-    # Injection native de l'Enrichissement complet (Threat Intel massif)
-    if payload.get("enrichment"):
-        system_prompt += f"\n\n[ENRICHISSEMENT THREAT INTEL (JSON)]\n{json.dumps(payload['enrichment'], indent=2)}\nUtilise toutes ces donnees (Threat Actors, Malwares, TTPs) pour affiner ton analyse."
+    # INJECTION TOTALE : Tout le JSON brut est envoye a Ollama
+    system_prompt += f"\n\n[DONNEES COMPLETES DE L'ALERTE (JSON BRUT)]\n{json.dumps(payload, indent=2, default=str)}\nAnalyse TOUTES ces donnees sans exception. Utilise chaque champ pertinent pour ton raisonnement."
 
     result = soc_agent.qualify_alert(payload, system_prompt, history)
-    
+
     # Save the decision into memory
     database.save_alert(
-        src_ip=alert_data.alert.srcip,
-        description=alert_data.alert.rule_desc,
+        src_ip=src_ip,
+        description=description,
         classification=result.get("classification", "Erreur"),
         attack_type=result.get("attack_type", "Inconnu"),
         action_executed=result.get("automated_action", {}).get("action_type")
     )
-    
+
     return result
+
