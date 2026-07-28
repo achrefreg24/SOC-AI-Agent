@@ -174,7 +174,10 @@ def qualify_alert(alert_data: dict, system_prompt: str, history: dict = None) ->
             {"role": "user", "content": user_message},
         ],
         "stream": False,
-        "options": {"temperature": 0},
+        "options": {
+            "temperature": 0,
+            "num_ctx": 8192
+        },
         "format": "json",
     }
 
@@ -182,6 +185,7 @@ def qualify_alert(alert_data: dict, system_prompt: str, history: dict = None) ->
         r = requests.post(OLLAMA_URL, json=payload, timeout=300)
         r.raise_for_status()
         raw_answer = r.json()["message"]["content"].strip()
+        print(f"\n[DEBUG] OLLAMA RAW ANSWER:\n{raw_answer}\n")
         parsed = json.loads(raw_answer)
         analysis_context = parsed.get("analysis_context", "Contexte non fourni").strip()
         reasoning = parsed.get("reasoning", "Aucune reflexion fournie").strip()
