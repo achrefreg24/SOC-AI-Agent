@@ -37,7 +37,7 @@ RECOMMENDATIONS_BY_CLASS = {
 }
 
 
-def build_system_prompt(examples_df: pd.DataFrame) -> str:
+def build_system_prompt() -> str:
     lines = [
         "Tu es un Senior Threat Hunter. Pour chaque alerte de securite Wazuh, tu dois :",
         "1. La classifier dans EXACTEMENT une de ces 4 categories : Critique, Suspect, Informatif, Faux positif",
@@ -131,53 +131,7 @@ def build_system_prompt(examples_df: pd.DataFrame) -> str:
         "  \"automated_action\": {\"execute\": false, \"action_type\": null, \"target\": null}",
         "}",
         "",
-        "Voici d'autres exemples tires du contexte :",
-        "",
     ]
-    for _, row in examples_df.iterrows():
-        fake_alert = {
-            "alert": {
-                "id": 0,
-                "description": row.get('description', ''),
-                "level": row.get('rule_level', 0),
-                "src_ip": row.get('src_ip', 'N/A'),
-                "timestamp": "N/A"
-            },
-            "threat_intel": None,
-            "correlation": None
-        }
-        lines.append(f"Alerte Wazuh: {json.dumps(fake_alert, ensure_ascii=False)}")
-        
-        example_reco = RECOMMENDATIONS_BY_CLASS.get(row['label'], "")
-        action = {"execute": False, "action_type": None, "target": None}
-        attack_type = "Aucune"
-        
-        ip = str(row.get('src_ip', ''))
-        is_internal = ip.startswith("192.168.") or ip.startswith("10.") or ip.startswith("172.")
-        
-        if row['label'] == "Critique" and ip not in ["", "nan", "N/A"]:
-            attack_type = "Menace Detectee"
-            if is_internal:
-                reasoning = f"L'IP source {ip} commence par un prefixe prive. C'est une IP interne. J'applique wazuh-isolate-endpoint pour la quarantaine."
-                action = {"execute": True, "action_type": "wazuh-isolate-endpoint", "target": ip}
-            else:
-                reasoning = f"L'IP source {ip} ne correspond a aucun prefixe prive. C'est une IP externe. J'applique firewall-drop."
-                action = {"execute": True, "action_type": "firewall-drop", "target": ip}
-        else:
-            reasoning = "Cette alerte n'indique pas une menace active necessitant une action immediate. Je ne bloque rien."
-
-        expected_json = {
-            "analysis_context": f"Alerte de niveau {row.get('rule_level', 0)} avec la description '{row.get('description', '')}'. L'IP source est {ip}.",
-            "reasoning": reasoning,
-            "confidence_score": 90 if row['label'] == "Critique" else 60,
-            "classification": row['label'],
-            "attack_type": attack_type,
-            "mitre_tactic": "T0000 - Unknown" if attack_type == "Aucune" else "T1190 - Exploit Public-Facing Application",
-            "recommandation": example_reco,
-            "automated_action": action
-        }
-        lines.append(json.dumps(expected_json, ensure_ascii=False))
-        lines.append("")
     return "\n".join(lines)
 
 
@@ -286,13 +240,7 @@ def main():
         import ast
         alert_data = ast.literal_eval(args.alert_json)
 
-    df = pd.read_csv(args.dataset).dropna(subset=["label", "description"])
-    examples_parts = []
-    for label_value, group in df.groupby("label"):
-        n = min(len(group), args.n_examples)
-        examples_parts.append(group.sample(n=n, random_state=42))
-    examples_df = pd.concat(examples_parts, ignore_index=True)
-    system_prompt = build_system_prompt(examples_df)
+    system_prompt = build_system_prompt()
 
     result = qualify_alert(
         alert_data=alert_data,

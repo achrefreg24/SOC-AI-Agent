@@ -55,17 +55,7 @@ except Exception as e:
 def get_system_prompt() -> str:
     global _system_prompt_cache
     if _system_prompt_cache is None:
-        if not DATASET_PATH.exists():
-            raise RuntimeError(
-                f"{DATASET_PATH} introuvable. Lance l'API depuis le bon dossier."
-            )
-        df = pd.read_csv(DATASET_PATH).dropna(subset=["label", "description"])
-        examples_parts = []
-        for label_value, group in df.groupby("label"):
-            n = min(len(group), 4)
-            examples_parts.append(group.sample(n=n, random_state=42))
-        examples_df = pd.concat(examples_parts, ignore_index=True)
-        _system_prompt_cache = build_system_prompt(examples_df)
+        _system_prompt_cache = build_system_prompt()
     return _system_prompt_cache
 
 
