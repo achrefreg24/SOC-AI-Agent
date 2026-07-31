@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Active Defender SOC AI — Integration Guide</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --blue: #58a6ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --orange: #d29922;
+      --purple: #bc8cff;
+      --teal: #39d353;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    /* ── Layout ── */
+    .page { display: flex; min-height: 100vh; }
+
+    nav {
+      width: 260px;
+      min-width: 260px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      overflow-y: auto;
+    }
+
+    nav .logo {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    nav .logo h1 { font-size: 16px; font-weight: 600; color: var(--blue); }
+    nav .logo p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    nav a {
+      display: block;
+      padding: 8px 20px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13.5px;
+      border-left: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    nav a:hover, nav a.active {
+      color: var(--text);
+      background: var(--surface2);
+      border-left-color: var(--blue);
+    }
+    nav .nav-section {
+      padding: 10px 20px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    main {
+      margin-left: 260px;
+      flex: 1;
+      padding: 40px 48px;
+      max-width: 900px;
+    }
+
+    /* ── Sections ── */
+    section { margin-bottom: 60px; }
+    section h2 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    section h3 { font-size: 16px; font-weight: 600; margin: 24px 0 8px; color: var(--blue); }
+    p { color: #adb5bd; margin-bottom: 12px; font-size: 14.5px; }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, #0d2137 0%, #0d1117 60%);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      margin-bottom: 40px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -40px; right: -40px;
+      width: 200px; height: 200px;
+      background: radial-gradient(circle, rgba(88,166,255,0.08) 0%, transparent 70%);
+    }
+    .hero h1 { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .hero h1 span { color: var(--blue); }
+    .hero p { color: var(--muted); font-size: 15px; margin-bottom: 0; }
+
+    /* ── Engine Cards ── */
+    .engines { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+    .engine-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      border-top: 3px solid;
+    }
+    .engine-card.e1 { border-top-color: var(--green); }
+    .engine-card.e2 { border-top-color: var(--blue); }
+    .engine-card .tag {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .engine-card.e1 .tag { color: var(--green); }
+    .engine-card.e2 .tag { color: var(--blue); }
+    .engine-card h3 { font-size: 15px; margin: 0 0 8px; color: var(--text); }
+    .engine-card p { font-size: 13px; margin: 0; }
+    .engine-card ul { margin: 8px 0 0; padding-left: 16px; font-size: 13px; color: var(--muted); }
+    .engine-card ul li { margin-bottom: 4px; }
+
+    /* ── Flow diagram ── */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+    .flow-step {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-size: 13px;
+      text-align: center;
+      min-width: 110px;
+    }
+    .flow-step strong { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+    .flow-arrow { color: var(--muted); font-size: 18px; }
+    .flow-yes { color: var(--green); font-size: 11px; font-weight: 600; }
+    .flow-no { color: var(--red); font-size: 11px; font-weight: 600; }
+
+    /* ── Code blocks ── */
+    .code-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin: 12px 0;
+      overflow: hidden;
+    }
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .code-label { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+    .copy-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 3px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover { background: var(--blue); color: #000; border-color: var(--blue); }
+    pre {
+      padding: 16px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      color: #c9d1d9;
+    }
+    .hl-key { color: #79c0ff; }
+    .hl-str { color: #a5d6ff; }
+    .hl-num { color: #f2cc60; }
+    .hl-bool-t { color: var(--green); }
+    .hl-bool-f { color: var(--red); }
+    .hl-comment { color: #6e7681; font-style: italic; }
+
+    /* ── Badges and Tags ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
+    .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
+    .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
+    .badge-blue { background: rgba(88,166,255,0.15); color: var(--blue); }
+    .badge-purple { background: rgba(188,140,255,0.15); color: var(--purple); }
+
+    /* ── Alerts ── */
+    .alert {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 16px 0;
+      font-size: 14px;
+      border-left: 4px solid;
+    }
+    .alert-info { background: rgba(88,166,255,0.08); border-color: var(--blue); color: #adb5bd; }
+    .alert-warn { background: rgba(210,153,34,0.08); border-color: var(--orange); color: #adb5bd; }
+    .alert-success { background: rgba(63,185,80,0.08); border-color: var(--green); color: #adb5bd; }
+    .alert-danger { background: rgba(248,81,73,0.08); border-color: var(--red); color: #adb5bd; }
+    .alert strong { display: block; margin-bottom: 4px; color: var(--text); }
+
+    /* ── Test Result Table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 16px 0;
+    }
+    th {
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      color: #adb5bd;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+
+    /* ── Steps ── */
+    .steps { margin: 16px 0; }
+    .step {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .step-num {
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      background: var(--blue);
+      color: #000;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .step-body h4 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .step-body p { font-size: 13px; margin: 0; }
+    code {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12.5px;
+      color: var(--purple);
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- SIDEBAR NAV -->
+  <nav>
+    <div class="logo">
+      <h1>🛡️ Active Defender</h1>
+      <p>SOC AI Integration Guide</p>
+    </div>
+    <div class="nav-section">Overview</div>
+    <a href="#how-it-works" class="active">How It Works</a>
+    <a href="#classifications">Alert Classifications</a>
+    <div class="nav-section">Integration</div>
+    <a href="#connection">Network Setup</a>
+    <a href="#api-request">What to Send</a>
+    <a href="#api-response">What You Receive</a>
+    <div class="nav-section">Testing</div>
+    <a href="#stress-test">Running the Tests</a>
+    <a href="#reading-results">Reading the Results</a>
+    <a href="#ml-toggle">ML Engine Toggle</a>
+    <a href="#sqlite-memory">The AI Memory (SQLite)</a>
+    <div class="nav-section">Reference</div>
+    <a href="#health">Health Check</a>
+    <a href="#troubleshooting">Troubleshooting</a>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <main>
+
+    <div class="hero">
+      <h1>Active Defender <span>SOC AI</span></h1>
+      <p>A dual-engine threat analysis system powered by Machine Learning + LLaMA 3.<br>
+      Designed to drastically reduce false positives and automate SOC tier-1 response.</p>
+    </div>
+
+    <!-- ── HOW IT WORKS ── -->
+    <section id="how-it-works">
+      <h2>⚙️ How It Works</h2>
+      <p>Every alert goes through a two-stage process. Think of it like a fast security guard at the door, and a senior detective inside.</p>
+
+      <div class="engines">
+        <div class="engine-card e1">
+          <div class="tag">Engine 1 — Speed</div>
+          <h3>🟢 Machine Learning Filter</h3>
+          <p>Analyzes the alert text, time of day, and attack frequency using a trained Random Forest model.</p>
+          <ul>
+            <li>Response time: <strong>~0.1 seconds</strong></li>
+            <li>Only triggers if confidence ≥ 90%</li>
+            <li>Drops known false positives instantly</li>
+          </ul>
+        </div>
+        <div class="engine-card e2">
+          <div class="tag">Engine 2 — Intelligence</div>
+          <h3>🔵 LLaMA 3 Brain</h3>
+          <p>Deep forensic analysis combining the alert, IP history, Threat Intel, and SOC playbooks.</p>
+          <ul>
+            <li>Response time: <strong>~60–120 seconds</strong></li>
+            <li>Always handles Threat Intel-flagged IPs</li>
+            <li>Makes contextual, explained decisions</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Decision Flow</h3>
+      <div class="flow">
+        <div class="flow-step"><strong>Alert Arrives</strong>Wazuh sends JSON</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><strong>Threat Intel?</strong>MISP / OpenCTI</div>
+        <div class="flow-arrow" style="flex-direction:column; display:flex; gap:2px">
+          <span class="flow-yes">YES → E2</span>
+          <span class="flow-no">NO ↓</span>
+        </div>
+        <div class="flow-step"><strong>Engine 1</strong>ML ≥ 90%?</div>
+        <div class="flow-arrow" style="flex-direction:column; display:flex; gap:2px">
+          <span class="flow-yes">YES → DROP</span>
+          <span class="flow-no">NO ↓</span>
+        </div>
+        <div class="flow-step"><strong>Engine 2</strong>LLaMA 3</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step"><strong>Response</strong>+ Auto-Action</div>
+      </div>
+    </section>
+
+    <!-- ── CLASSIFICATIONS ── -->
+    <section id="classifications">
+      <h2>🏷️ Alert Classifications</h2>
+      <p>The AI always assigns one of four labels:</p>
+
+      <table>
+        <thead>
+          <tr><th>Label</th><th>Meaning</th><th>Auto-Action?</th><th>Example</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge badge-red">Critique</span></td>
+            <td>Confirmed active attack. Immediate response required.</td>
+            <td><span class="badge badge-green">Yes</span></td>
+            <td>SQL Injection, Ransomware, Malware</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-orange">Suspect</span></td>
+            <td>Abnormal activity, not yet confirmed dangerous.</td>
+            <td><span class="badge badge-red">No</span></td>
+            <td>Port scan (no threat intel)</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-blue">Informatif</span></td>
+            <td>Normal event, no risk. For logging only.</td>
+            <td><span class="badge badge-red">No</span></td>
+            <td>Routine system event</td>
+          </tr>
+          <tr>
+            <td><span class="badge badge-purple">Faux positif</span></td>
+            <td>Looks like a threat but is completely legitimate.</td>
+            <td><span class="badge badge-red">No</span></td>
+            <td>Successful employee login</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="alert alert-info">
+        <strong>Auto-Action Safety Rule</strong>
+        Automated actions only execute when: classification = <strong>Critique</strong> AND AI confidence ≥ <strong>85%</strong>. 
+        A human override is always possible.
+      </div>
+
+      <h3>Automated Action Types</h3>
+      <table>
+        <thead><tr><th>Action</th><th>When</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>firewall-drop</code></td>
+            <td>External IP (not 192.168.x / 10.x / 172.x)</td>
+            <td>Blocks the IP at the perimeter firewall</td>
+          </tr>
+          <tr>
+            <td><code>wazuh-isolate-endpoint</code></td>
+            <td>Internal IP (192.168.x / 10.x / 172.x)</td>
+            <td>Quarantines the machine without blocking the whole network</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── CONNECTION ── -->
+    <section id="connection">
+      <h2>🌐 Network Setup (Tailscale)</h2>
+      <p>Both machines must be on the same Tailscale network. Once they are, use the AI machine's Tailscale IP.</p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h4>Find the AI's Tailscale IP</h4>
+            <p>On the AI machine, open a terminal and type:</p>
+            <div class="code-block" style="margin-top:8px">
+              <pre>tailscale ip -4</pre>
+            </div>
+            <p>This gives you an IP like <code>100.64.X.X</code>. That is the address the Blue Team will use.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h4>Start the AI API server</h4>
+            <p>On the AI machine, navigate to the project folder and run:</p>
+            <div class="code-block" style="margin-top:8px">
+              <pre>uvicorn api:app --host 0.0.0.0 --port 8000</pre>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h4>Verify connection from Blue Team machine</h4>
+            <p>Open a browser and go to: <code>http://100.64.X.X:8000/health</code><br>
+            You should see: <code>{"api": "ok", "engine1_ml": "ok", ...}</code></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── API REQUEST ── -->
+    <section id="api-request">
+      <h2>📤 What to Send (Request Format)</h2>
+      <p>Send a <strong>POST</strong> request to <code>http://100.64.X.X:8000/qualifier-alerte</code></p>
+
+      <h3>n8n HTTP Request Node Settings</h3>
+      <table>
+        <thead><tr><th>Setting</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Method</td><td><code>POST</code></td></tr>
+          <tr><td>URL</td><td><code>http://100.64.X.X:8000/qualifier-alerte</code></td></tr>
+          <tr><td>Body Content-Type</td><td><code>JSON</code></td></tr>
+          <tr><td>Authentication</td><td>None required</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Full JSON Body</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-label">json — request body</span>
+          <button class="copy-btn" onclick="copyBlock(this)">Copy</button>
+        </div>
+        <pre>{
+  <span class="hl-key">"alert"</span>: {
+    <span class="hl-key">"id"</span>:          <span class="hl-num">1234</span>,
+    <span class="hl-key">"description"</span>: <span class="hl-str">"{{ $json.description }}"</span>,
+    <span class="hl-key">"level"</span>:       <span class="hl-num">10</span>,
+    <span class="hl-key">"src_ip"</span>:      <span class="hl-str">"{{ $json.src_ip }}"</span>,
+    <span class="hl-key">"timestamp"</span>:   <span class="hl-str">"{{ $json.timestamp }}"</span>
+  },
+  <span class="hl-key">"threat_intel"</span>: {
+    <span class="hl-key">"misp"</span>:    { <span class="hl-key">"found"</span>: <span class="hl-bool-f">false</span> },
+    <span class="hl-key">"opencti"</span>: { <span class="hl-key">"found"</span>: <span class="hl-bool-f">false</span> }
+  },
+  <span class="hl-key">"correlation"</span>: <span class="hl-bool-f">null</span>
+}</pre>
+      </div>
+
+      <h3>Example — Sending a Real Wazuh Alert</h3>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-label">json — real example with threat intel hit</span>
+          <button class="copy-btn" onclick="copyBlock(this)">Copy</button>
+        </div>
+        <pre>{
+  <span class="hl-key">"alert"</span>: {
+    <span class="hl-key">"id"</span>:          <span class="hl-num">9001</span>,
+    <span class="hl-key">"description"</span>: <span class="hl-str">"SSH Brute Force detected from external host"</span>,
+    <span class="hl-key">"level"</span>:       <span class="hl-num">12</span>,
+    <span class="hl-key">"src_ip"</span>:      <span class="hl-str">"203.0.113.50"</span>,
+    <span class="hl-key">"timestamp"</span>:   <span class="hl-str">"2026-07-28T03:00:00Z"</span>
+  },
+  <span class="hl-key">"threat_intel"</span>: {
+    <span class="hl-key">"misp"</span>:    { <span class="hl-key">"found"</span>: <span class="hl-bool-t">true</span>,  <span class="hl-key">"matches"</span>: [<span class="hl-str">"known SSH scanner"</span>] },
+    <span class="hl-key">"opencti"</span>: { <span class="hl-key">"found"</span>: <span class="hl-bool-f">false</span> }
+  }
+}</pre>
+      </div>
+    </section>
+
+    <!-- ── API RESPONSE ── -->
+    <section id="api-response">
+      <h2>📥 What You Receive (Response Format)</h2>
+      <p>The API always returns a JSON object. Here is every field and what it means:</p>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-label">json — response example (Critique alert)</span>
+          <button class="copy-btn" onclick="copyBlock(this)">Copy</button>
+        </div>
+        <pre>{
+  <span class="hl-key">"analysis_context"</span>: <span class="hl-str">"Alert level 12. IP 203.0.113.50. MISP flagged as known SSH scanner."</span>,
+  <span class="hl-comment">// ↑ What the AI actually READ before deciding</span>
+
+  <span class="hl-key">"reasoning"</span>:        <span class="hl-str">"Attack outside business hours (03:00). IP is external. MISP confirmed malicious. Applying firewall-drop."</span>,
+  <span class="hl-comment">// ↑ Step-by-step explanation of HOW the decision was made</span>
+
+  <span class="hl-key">"classification"</span>:   <span class="hl-str">"Critique"</span>,
+  <span class="hl-key">"confidence_score"</span>: <span class="hl-num">95</span>,
+  <span class="hl-key">"attack_type"</span>:      <span class="hl-str">"SSH Brute Force"</span>,
+  <span class="hl-key">"mitre_tactic"</span>:     <span class="hl-str">"T1110 - Brute Force"</span>,
+  <span class="hl-key">"recommandation"</span>:   <span class="hl-str">"Block IP at perimeter firewall."</span>,
+
+  <span class="hl-key">"automated_action"</span>: {
+    <span class="hl-key">"execute"</span>:     <span class="hl-bool-t">true</span>,
+    <span class="hl-key">"action_type"</span>: <span class="hl-str">"firewall-drop"</span>,
+    <span class="hl-key">"target"</span>:      <span class="hl-str">"203.0.113.50"</span>
+  }
+}</pre>
+      </div>
+
+      <table>
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>analysis_context</code></td><td>string</td><td>The raw facts the AI was given (new transparency field)</td></tr>
+          <tr><td><code>reasoning</code></td><td>string</td><td>Step-by-step logic used to reach the decision</td></tr>
+          <tr><td><code>classification</code></td><td>string</td><td>One of: Critique, Suspect, Informatif, Faux positif</td></tr>
+          <tr><td><code>confidence_score</code></td><td>int (1–100)</td><td>How confident the AI is in its decision</td></tr>
+          <tr><td><code>attack_type</code></td><td>string</td><td>Explicit name of the attack (e.g. "SQL Injection")</td></tr>
+          <tr><td><code>mitre_tactic</code></td><td>string</td><td>MITRE ATT&CK ID and name</td></tr>
+          <tr><td><code>recommandation</code></td><td>string</td><td>Human-readable recommendation for the analyst</td></tr>
+          <tr><td><code>automated_action.execute</code></td><td>bool</td><td>True = action was taken automatically</td></tr>
+          <tr><td><code>automated_action.action_type</code></td><td>string</td><td>firewall-drop, wazuh-isolate-endpoint, or null</td></tr>
+          <tr><td><code>automated_action.target</code></td><td>string</td><td>The IP that was blocked/isolated, or null</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── STRESS TEST ── -->
+    <section id="stress-test">
+      <h2>🧪 Running the Tests</h2>
+      <p>The stress test fires 8 pre-built scenarios at the running API and shows you the results in real time. The API must be running in another terminal first.</p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h4>Terminal 1 — Start the API</h4>
+            <div class="code-block" style="margin-top:8px">
+              <pre>uvicorn api:app --host 0.0.0.0 --port 8000</pre>
+            </div>
+            <p>Wait until you see: <code>Application startup complete.</code></p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h4>Terminal 2 — Run the stress test</h4>
+            <div class="code-block" style="margin-top:8px">
+              <pre>python stress_test.py</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── READING RESULTS ── -->
+    <section id="reading-results">
+      <h2>📊 Reading the Results</h2>
+      <p>Here is what each test is checking:</p>
+
+      <table>
+        <thead><tr><th>#</th><th>Test Name</th><th>What it validates</th><th>Expected</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>SQL Injection</td><td>Does the AI correctly identify and block an active web attack?</td><td><span class="badge badge-red">Critique</span> + firewall-drop</td></tr>
+          <tr><td>2</td><td>External DDoS</td><td>Does Threat Intel (MISP hit) force an escalation to Engine 2?</td><td><span class="badge badge-red">Critique</span></td></tr>
+          <tr><td>3</td><td>Internal Ransomware</td><td>Does the AI use wazuh-isolate for an internal IP (never firewall-drop)?</td><td><span class="badge badge-red">Critique</span> + wazuh-isolate</td></tr>
+          <tr><td>4</td><td>Normal Login</td><td>Can Engine 1 silently drop a known benign log?</td><td><span class="badge badge-purple">Faux positif</span> instant</td></tr>
+          <tr><td>5</td><td>Port Scan</td><td>Is a reconnaissance event classified correctly (not Critique)?</td><td><span class="badge badge-orange">Suspect</span></td></tr>
+          <tr><td>6</td><td>Repeated Attack</td><td>Does the memory database detect the same IP attacking again?</td><td><span class="badge badge-red">Critique</span> aggressive response</td></tr>
+          <tr><td>7</td><td>Instant ML Filter</td><td>Does Engine 1 drop a second known benign log in under 1 second?</td><td><span class="badge badge-purple">Faux positif</span> &lt; 1s</td></tr>
+          <tr><td>8</td><td>Threat Intel Bypass</td><td>Does a low-level alert become Critique because OpenCTI flagged the IP?</td><td><span class="badge badge-red">Critique</span> despite low rule level</td></tr>
+        </tbody>
+      </table>
+
+      <div class="alert alert-success">
+        <strong>✅ In the Summary, look for:</strong>
+        [ENGINE 1] on Tests 4 and 7 with a time &lt; 1 second = ML filter working.<br>
+        [ENGINE 2] on all others = LLaMA 3 doing deep analysis.<br>
+        Action:True on Critique tests = automated response triggered.
+      </div>
+    </section>
+
+    <!-- ── ML TOGGLE ── -->
+    <section id="ml-toggle">
+      <h2>🎛️ ML Engine Toggle</h2>
+      <p>You can enable or disable Engine 1 at any time. This is useful for testing or comparing results.</p>
+
+      <h3>Option A — In the stress test script</h3>
+      <p>Open <code>stress_test.py</code> and change line 14:</p>
+      <div class="code-block">
+        <div class="code-header"><span class="code-label">python — stress_test.py, line ~14</span></div>
+        <pre>USE_ML_ENGINE = <span class="hl-bool-t">True</span>   <span class="hl-comment"># Change to False to bypass ML entirely</span></pre>
+      </div>
+
+      <h3>Option B — Via the API URL (no restart needed)</h3>
+      <p>Add <code>?disable_ml=true</code> to the end of the API URL in your n8n node:</p>
+      <div class="code-block">
+        <div class="code-header"><span class="code-label">url</span></div>
+        <pre>http://100.64.X.X:8000/qualifier-alerte?disable_ml=true</pre>
+      </div>
+
+      <div class="alert alert-info">
+        <strong>When to use each mode</strong>
+        <strong>ML ON (default):</strong> Production and demos. Engine 1 silently drops obvious false positives before LLaMA 3 even wakes up.<br>
+        <strong>ML OFF:</strong> Deep debugging. Forces every single alert through LLaMA 3 so you can read the full reasoning for each one.
+      </div>
+    </section>
+
+    <!-- ── SQLITE MEMORY ── -->
+    <section id="sqlite-memory">
+      <h2>🧠 The AI Memory (SQLite)</h2>
+      <p>The SOC AI doesn't just look at alerts in isolation. It has a built-in memory system powered by a local SQLite database (<code>soc_memory.db</code>).</p>
+      
+      <h3>What is stored?</h3>
+      <p>Every time an alert is processed, the system logs:</p>
+      <ul>
+        <li>The Source IP</li>
+        <li>The Alert Description</li>
+        <li>The AI's Classification</li>
+        <li>The Attack Type</li>
+        <li>The Action Executed (if any)</li>
+        <li>The exact Timestamp</li>
+      </ul>
+
+      <h3>Why is this important?</h3>
+      <div class="alert alert-info">
+        <strong>1. ML Engine Velocity Tracking (Engine 1)</strong><br>
+        Engine 1 checks the SQLite database to calculate <code>alerts_per_minute</code>. If an IP suddenly spikes in activity (e.g., 50 requests in 60 seconds), the ML model sees this feature and is much more likely to flag it.
+      </div>
+      <div class="alert alert-success">
+        <strong>2. LLaMA 3 Historical Context (Engine 2)</strong><br>
+        Before LLaMA 3 makes a decision, it queries the database: <em>"Has this IP attacked us in the last 24 hours?"</em><br>
+        If the IP is a repeat offender, this context is injected into LLaMA's prompt. LLaMA uses this to escalate the threat level and become more aggressive in its recommendations, even if the individual alert seems minor.
+      </div>
+    </section>
+
+    <!-- ── HEALTH ── -->
+    <section id="health">
+      <h2>💚 Health Check</h2>
+      <p>Before any test, verify all systems are green:</p>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-label">GET — health endpoint</span>
+          <button class="copy-btn" onclick="copyBlock(this)">Copy</button>
+        </div>
+        <pre>http://100.64.X.X:8000/health</pre>
+      </div>
+      <p>Expected response:</p>
+      <div class="code-block">
+        <pre>{
+  <span class="hl-key">"api"</span>:         <span class="hl-str">"ok"</span>,
+  <span class="hl-key">"engine1_ml"</span>:  <span class="hl-str">"ok"</span>,   <span class="hl-comment">// "indisponible" if .pkl files are missing</span>
+  <span class="hl-key">"engine2_llm"</span>: <span class="hl-str">"ok"</span>,   <span class="hl-comment">// "indisponible" if Ollama is not running</span>
+  <span class="hl-key">"dataset"</span>:     <span class="hl-str">"ok"</span>    <span class="hl-comment">// "introuvable" if CSV is missing</span>
+}</pre>
+      </div>
+    </section>
+
+    <!-- ── TROUBLESHOOTING ── -->
+    <section id="troubleshooting">
+      <h2>🔧 Troubleshooting</h2>
+      <table>
+        <thead><tr><th>Problem</th><th>Cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>Read timed out</code> on first test</td>
+            <td>LLaMA 3 wasn't pre-loaded in RAM</td>
+            <td>The API warmup handles this automatically on startup. Just wait for the ✅ warmup message.</td>
+          </tr>
+          <tr>
+            <td><code>Connection refused</code></td>
+            <td>API is not running</td>
+            <td>Run <code>uvicorn api:app --host 0.0.0.0 --port 8000</code> first.</td>
+          </tr>
+          <tr>
+            <td><code>engine2_llm: indisponible</code></td>
+            <td>Ollama is not running</td>
+            <td>Run <code>ollama serve</code> in a terminal.</td>
+          </tr>
+          <tr>
+            <td><code>engine1_ml: indisponible</code></td>
+            <td><code>models/</code> folder is missing .pkl files</td>
+            <td>Run <code>python retrain_engine1.py</code> to regenerate the models.</td>
+          </tr>
+          <tr>
+            <td>All tests return <code>Suspect</code></td>
+            <td>LLaMA 3 is being too conservative</td>
+            <td>This was fixed in the latest update to <code>soc_agent.py</code>. Restart the API.</td>
+          </tr>
+          <tr>
+            <td>Scary message after Ctrl+C</td>
+            <td>Intel Fortran runtime in Anaconda's numpy</td>
+            <td>This is completely harmless. Ignore it.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  function copyBlock(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    const text = pre.innerText;
+    navigator.clipboard.writeText(text.trim()).then(() => {
+      btn.innerText = '✓ Copied';
+      btn.style.background = '#3fb950';
+      btn.style.color = '#000';
+      btn.style.borderColor = '#3fb950';
+      setTimeout(() => {
+        btn.innerText = 'Copy';
+        btn.style.background = '';
+        btn.style.color = '';
+        btn.style.borderColor = '';
+      }, 2000);
+    });
+  }
+
+  // Highlight active nav link on scroll
+  const sections = document.querySelectorAll('section');
+  const navLinks = document.querySelectorAll('nav a');
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navLinks.forEach(l => l.classList.remove('active'));
+        const link = document.querySelector(`nav a[href="#${e.target.id}"]`);
+        if (link) link.classList.add('active');
+      }
+    });
+  }, { threshold: 0.3 });
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

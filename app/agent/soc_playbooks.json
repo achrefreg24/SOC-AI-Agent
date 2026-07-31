@@ -1,0 +1,44 @@
+[
+    {
+        "id": "PB-001",
+        "name": "SQL Injection Response",
+        "triggers": ["SQL injection", "SQLi", "database error", "syntax error"],
+        "mitre_tactic": "T1190 - Exploit Public-Facing Application",
+        "procedure": "1. Analyze WAF logs to confirm payload delivery success. 2. Verify backend database logs for executed anomalous queries. 3. If payload executed, force password reset for DB service accounts. 4. Block source IP at the Edge Firewall (firewall-drop). 5. Update WAF rules with the identified attack signature."
+    },
+    {
+        "id": "PB-002",
+        "name": "Ransomware / Mass Encryption",
+        "triggers": ["ransomware", "mass encryption", "files renamed", "unknown extension"],
+        "mitre_tactic": "T1486 - Data Encrypted for Impact",
+        "procedure": "1. IMMEDIATELY isolate the affected endpoint via Wazuh agent (wazuh-isolate-endpoint). 2. Disconnect the host from the Active Directory domain to prevent lateral movement (T1021). 3. Trigger endpoint memory dump for forensics. 4. Check VSS (Volume Shadow Copies) status. 5. Escalate to Tier 3 CIRT (Cyber Incident Response Team)."
+    },
+    {
+        "id": "PB-003",
+        "name": "DDoS Flood / DoS Activity",
+        "triggers": ["DDoS", "flood", "ICMP flood", "high volume", "SYN flood"],
+        "mitre_tactic": "T1498 - Network Denial of Service",
+        "procedure": "1. Verify traffic volume matches DDoS thresholds in NetFlow. 2. Engage Anti-DDoS scrubbing center (BGP Flowspec or Cloudflare). 3. Block malicious subnets at the perimeter firewall (firewall-drop). 4. Ensure internal application load balancers are scaling up. 5. Monitor CPU/Memory of edge routers."
+    },
+    {
+        "id": "PB-004",
+        "name": "SSH / RDP Brute Force",
+        "triggers": ["brute force", "authentication failure", "multiple failed logins", "sshd"],
+        "mitre_tactic": "T1110 - Brute Force",
+        "procedure": "1. Check if ANY login attempt succeeded after the failures (Compromised Account). 2. If compromised, instantly disable the AD/LDAP user account (Disable-User). 3. If just scanning, block the attacking IP (firewall-drop) via fail2ban or firewall API. 4. Verify MFA is enforced for the targeted service."
+    },
+    {
+        "id": "PB-005",
+        "name": "Suspicious Lateral Movement",
+        "triggers": ["lateral movement", "Pass the Hash", "psexec", "smb exec", "remote scheduled task"],
+        "mitre_tactic": "T1021 - Remote Services",
+        "procedure": "1. Isolate the source endpoint generating the SMB/RPC traffic (wazuh-isolate-endpoint). 2. Hunt for compromised Kerberos tickets (Golden/Silver ticket). 3. Block RPC and SMB traffic between workstations (Zero Trust policy). 4. Alert Active Directory admins for forced session termination."
+    },
+    {
+        "id": "PB-006",
+        "name": "Data Exfiltration",
+        "triggers": ["exfiltration", "large data transfer", "unusual outbound", "DNS tunneling"],
+        "mitre_tactic": "T1048 - Exfiltration Over Alternative Protocol",
+        "procedure": "1. Identify the destination IP and block outbound connections immediately (firewall-drop). 2. Use DLP logs to identify what data was stolen (PCI/PII/Intellectual Property). 3. Isolate the internal machine leaking data (wazuh-isolate-endpoint). 4. Initiate Data Breach Legal Protocol if PII is confirmed leaked."
+    }
+]
