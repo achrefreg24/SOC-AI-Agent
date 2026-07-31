@@ -1,6 +1,7 @@
 import sqlite3
 import datetime
 import os
+import pandas as pd
 
 DB_PATH = "soc_memory.db"
 
@@ -19,10 +20,26 @@ def init_db():
             action_executed TEXT
         )
     ''')
+    
+    # Add new columns for analytics and knowledge distillation (ignoring errors if they already exist)
+    new_columns = [
+        ("rule_level", "INTEGER"),
+        ("ai_confidence", "REAL"),
+        ("mitre_tactic", "TEXT"),
+        ("engine_used", "TEXT")
+    ]
+    
+    for col_name, col_type in new_columns:
+        try:
+            cursor.execute(f"ALTER TABLE alerts ADD COLUMN {col_name} {col_type}")
+        except sqlite3.OperationalError:
+            pass # Column already exists
+            
     conn.commit()
     conn.close()
 
-def save_alert(src_ip: str, description: str, classification: str, attack_type: str, action_executed: str):
+def save_alert(src_ip: str, description: str, classification: str, attack_type: str, action_executed: str,
+               rule_level: int = None, ai_confidence: float = None, mitre_tactic: str = None, engine_used: str = "Engine2"):
     """Sauvegarde une alerte traitee par l'IA dans la base de donnees."""
     if src_ip in [None, "None", "nan", "N/A", ""]:
         src_ip = "UNKNOWN"
@@ -32,9 +49,11 @@ def save_alert(src_ip: str, description: str, classification: str, attack_type: 
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     
     cursor.execute('''
-        INSERT INTO alerts (timestamp, src_ip, description, ai_classification, ai_attack_type, action_executed)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (now, src_ip, description, classification, attack_type, str(action_executed)))
+        INSERT INTO alerts (timestamp, src_ip, description, ai_classification, ai_attack_type, action_executed,
+                            rule_level, ai_confidence, mitre_tactic, engine_used)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (now, src_ip, description, classification, attack_type, str(action_executed),
+          rule_level, ai_confidence, mitre_tactic, engine_used))
     
     conn.commit()
     conn.close()
@@ -87,3 +106,11 @@ def get_alerts_last_minute(src_ip: str) -> int:
     conn.close()
     
     return count
+
+def get_all_alerts_df():
+    """Return all alerts as a Pandas DataFrame (for analytics dashboard)."""
+    conn = sqlite3.connect(DB_PATH)
+    query = "SELECT * FROM alerts ORDER BY timestamp DESC"
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    return df

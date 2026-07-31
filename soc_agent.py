@@ -10,7 +10,7 @@ import argparse
 import json
 import requests
 import pandas as pd
-from rag_module import get_rag_context
+from rag_vector import get_rag_context_vector
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "llama3"
@@ -150,7 +150,7 @@ def qualify_alert(alert_data: dict, system_prompt: str, history: dict = None) ->
         alert_data.get("description", "") or
         ""
     )
-    rag_context = get_rag_context(desc)
+    rag_context = get_rag_context_vector(desc)
     if rag_context:
         system_prompt += rag_context
 

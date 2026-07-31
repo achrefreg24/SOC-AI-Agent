@@ -20,11 +20,11 @@ import subprocess
 import sys
 import datetime
 import pandas as pd
+import sqlite3
 from pathlib import Path
-from sqlalchemy import create_engine, text
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-DB_URL       = "postgresql+psycopg2://soc_user:soc_secret@localhost:5432/soc_db"
+DB_PATH      = "soc_memory.db"
 DATASET_PATH = Path("dataset_ready_for_ai.csv")
 MIN_CONFIDENCE = 85.0   # Only distill decisions the LLM was confident about
 MIN_NEW_ROWS   = 5      # Only retrain if we have at least 5 new rows to add
@@ -45,15 +45,14 @@ LABEL_MAP = {
 
 def fetch_new_decisions():
     """
-    Fetch Engine 2 decisions from PostgreSQL that are:
+    Fetch Engine 2 decisions from SQLite that are:
     - High confidence (>= 85%)
     - Not yet distilled (from the last 7 days)
     """
-    print("📊 Connecting to PostgreSQL...")
-    engine = create_engine(DB_URL)
+    print("📊 Connecting to SQLite database...")
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=7)
 
-    query = text("""
+    query = """
         SELECT 
             timestamp,
             src_ip,
@@ -65,17 +64,26 @@ def fetch_new_decisions():
             mitre_tactic
         FROM alerts
         WHERE engine_used = 'Engine2'
-          AND ai_confidence >= :min_conf
-          AND timestamp >= :cutoff
+          AND ai_confidence >= ?
+          AND timestamp >= ?
         ORDER BY timestamp DESC
-    """)
+    """
 
-    with engine.connect() as conn:
-        result = conn.execute(query, {"min_conf": MIN_CONFIDENCE, "cutoff": cutoff})
-        rows = result.fetchall()
-        columns = result.keys()
+    conn = sqlite3.connect(DB_PATH)
+    # Return rows as dictionaries so we can easily create a DataFrame
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(query, (MIN_CONFIDENCE, cutoff.isoformat()))
+        rows = cursor.fetchall()
+        df = pd.DataFrame([dict(row) for row in rows])
+    except sqlite3.OperationalError as e:
+        print(f"⚠️ Error querying SQLite (maybe new columns not added yet?): {e}")
+        df = pd.DataFrame()
+    finally:
+        conn.close()
 
-    df = pd.DataFrame(rows, columns=list(columns))
     print(f"   Found {len(df)} high-confidence Engine 2 decisions.")
     return df
 

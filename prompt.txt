@@ -1,0 +1,47 @@
+Role & Context:
+You are a Principal AI Architect and Lead Cybersecurity Engineer. I am currently working on an internship project to build an Autonomous AI SOC (Security Operations Center) Analyst system. 
+
+I want to evaluate the technical feasibility, architectural design, potential risks, and step-by-step implementation plan for this project within my internship timeframe.
+
+---
+
+### 1. Proposed System Architecture Overview
+
+The system aims to move beyond a basic passive LLM script into an Autonomous AI SOC Agent capable of handling Tier-1 and Tier-2 triage:
+
+1. Engine 1 (Fast Noise Filter):
+   - Fast ML Model (Random Forest / LightGBM) to drop obvious false positives and high-volume background noise in under 0.1 seconds.
+
+2. Engine 2 (Autonomous Investigator & Decision Engine):
+   - LLM: Powered by Gemini 3.1 Pro / LLaMA 3.
+   - Advanced RAG Pipeline: Hybrid Search (Vector + Sparse BM25 via Qdrant/ChromaDB) with a Cross-Encoder Reranker to match current alerts against historical incidents and standard playbooks.
+   - GraphRAG: Mapping entities (User -> Host -> IP -> Process Tree) to preserve relationship context across security alerts.
+   - ReAct Agentic Workflow: Active tool-calling (VirusTotal, Active Directory lookup, EDR process tree query, Firewall rules) so the agent can actively gather evidence rather than just read raw logs.
+   - Dynamic Memory Loop: Human analyst feedback (Approve/Reject/Modify) gets vectorized and ingested into long-term vector memory, allowing the system to learn continuously over time.
+   - Safety & Guardrails: Strict IP logic boundaries (Internal vs. External handling), confidence thresholding (<85% confidence requires human sign-off), and human-in-the-loop (HITL) approval for destructive response actions.
+
+---
+
+### 2. What I Need You To Evaluate (Your Task)
+
+Please provide a deep-dive technical assessment covering the following 5 areas:
+
+1. Feasibility Assessment:
+   - Is this architecture technically viable for a real-world SOC? 
+   - What components are realistic to complete within an internship, and what parts should be simplified or mocked?
+
+2. Architectural Gaps & Bottlenecks:
+   - Where are the potential performance bottlenecks (e.g., LLM latency, vector search speed, tool loop timeouts)?
+   - What critical edge cases or failure modes in cybersecurity am I missing?
+
+3. Step-by-Step Internship Roadmap:
+   - Break down the development process into 4 clear phases (MVP -> Tool Integration -> RAG Memory -> Safety/HITL).
+   - Recommend which open-source tools or Python libraries best fit each module (e.g., LangGraph vs CrewAI, Qdrant vs ChromaDB, FastEmbed vs BGE).
+
+4. Data Flow & Integration Blueprint:
+   - Describe how data should flow from the SIEM (e.g., Wazuh logs) -> Engine 1 -> Engine 2 -> Tools -> Vector Memory -> Human Approval.
+
+5. Recommended High-Impact Code Structures:
+   - Provide clean Python boilerplates for the ReAct Tool Loop and the Vector Memory ingestion pipeline to help me kickstart development.
+
+Please structure your response with clear technical headings, concise bullet points, and actionable advice suitable for an intern presenting to their engineering lead.

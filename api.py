@@ -355,7 +355,11 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
                     description=description,
                     classification=result["classification"],
                     attack_type=result["attack_type"],
-                    action_executed=None
+                    action_executed=None,
+                    rule_level=level,
+                    ai_confidence=rf_proba,
+                    mitre_tactic="N/A",
+                    engine_used="Engine1"
                 )
                 return result
 
@@ -386,7 +390,11 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
         description=description,
         classification=result.get("classification", "Erreur"),
         attack_type=result.get("attack_type", "Inconnu"),
-        action_executed=result.get("automated_action", {}).get("action_type")
+        action_executed=result.get("automated_action", {}).get("action_type"),
+        rule_level=level,
+        ai_confidence=result.get("confidence_score", 0.0),
+        mitre_tactic=result.get("mitre_tactic", "N/A"),
+        engine_used="Engine2"
     )
 
     return result
