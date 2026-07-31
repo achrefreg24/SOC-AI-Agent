@@ -13,6 +13,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta, timezone
+from sqlalchemy import create_engine, text
 import database
 
 # ── Page Config ───────────────────────────────────────────────────────────────
@@ -42,10 +43,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── DB Connection ─────────────────────────────────────────────────────────────
+DB_URL = "postgresql+psycopg2://soc_user:soc_secret@localhost:5432/soc_db"
+
 @st.cache_data(ttl=30)  # Refresh every 30 seconds automatically
 def load_data():
     try:
-        df = database.get_all_alerts_df()
+        engine = create_engine(DB_URL)
+        df = pd.read_sql("SELECT * FROM alerts ORDER BY timestamp DESC", engine)
         if not df.empty:
             df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
         return df, None
@@ -78,7 +82,8 @@ st.title("🛡️ SOC AI Agent — Analytics Dashboard")
 st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 if error:
-    st.error(f"❌ Cannot connect to SQLite database: {error}")
+    st.error(f"❌ Cannot connect to PostgreSQL: {error}")
+    st.code("docker run --name soc-postgres -e POSTGRES_PASSWORD=soc_secret -e POSTGRES_DB=soc_db -e POSTGRES_USER=soc_user -p 5432:5432 -d postgres:15")
     st.stop()
 
 if df.empty:

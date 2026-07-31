@@ -20,9 +20,41 @@ import soc_agent
 import database
 from soc_agent import qualify_alert, build_system_prompt
 from scipy.sparse import hstack, csr_matrix
+import redis
 
-# Initialisation de la base de donnees memoire
+# Initialisation de la base de donnees SQL
 database.init_db()
+
+# Initialisation Redis (Fail-safe)
+try:
+    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+    redis_client.ping()
+    print("✅ Connecte a Redis (Velocity Tracking).")
+except redis.ConnectionError:
+    print("⚠️ Redis introuvable sur localhost:6379. Le tracking de velocite sera limite.")
+    redis_client = None
+
+def get_redis_alerts_per_minute(src_ip: str) -> int:
+    """O(1) sliding window velocity tracking via Redis."""
+    if not redis_client or not src_ip:
+        return database.get_alerts_last_minute(src_ip)
+    
+    key = f"rate:{src_ip}"
+    current_time = int(time.time())
+    window_start = current_time - 60
+    
+    try:
+        pipe = redis_client.pipeline()
+        pipe.zremrangebyscore(key, 0, window_start) # Remove old entries
+        pipe.zadd(key, {str(current_time): current_time}) # Add new entry
+        pipe.zcard(key) # Count entries in window
+        pipe.expire(key, 60) # Auto-cleanup
+        results = pipe.execute()
+        return results[2]
+    except Exception as e:
+        print(f"⚠️ Erreur Redis: {e}")
+        return database.get_alerts_last_minute(src_ip)
+
 
 app = FastAPI(
     title="Agent IA SOC - API de qualification d'alertes",
@@ -313,7 +345,7 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
             is_weekend = 1 if day_of_week >= 5 else 0
 
             ip_str = src_ip or ""
-            alerts_per_minute = database.get_alerts_last_minute(ip_str)
+            alerts_per_minute = get_redis_alerts_per_minute(ip_str)
 
             numeric_features = pd.DataFrame([{
                 "rule_level": level,

@@ -10,7 +10,7 @@ import argparse
 import json
 import requests
 import pandas as pd
-from rag_vector import get_rag_context_vector
+from rag_module import get_rag_context_vector
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "llama3"

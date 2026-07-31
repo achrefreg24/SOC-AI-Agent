@@ -18,12 +18,14 @@ import pandas as pd
 import pickle
 import numpy as np
 from pathlib import Path
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+import xgboost as xgb
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.utils.class_weight import compute_sample_weight
 from scipy.sparse import hstack
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -32,7 +34,7 @@ MODELS_DIR    = Path("models")
 MODELS_DIR.mkdir(exist_ok=True)
 
 print("=" * 60)
-print("  ENGINE 1 RETRAINING — NLP-Aware Random Forest")
+print("  ENGINE 1 RETRAINING — ENTERPRISE XGBOOST")
 print("=" * 60)
 
 # ── 1. Load & Clean ───────────────────────────────────────────────────────────
@@ -89,16 +91,19 @@ print(f"\n   Training set: {X_train.shape[0]} samples")
 print(f"   Test set:     {X_test.shape[0]} samples")
 
 # ── 4. Train the Model ────────────────────────────────────────────────────────
-print("[*] Training NLP-Aware Random Forest (n_estimators=200)...")
-model = RandomForestClassifier(
-    n_estimators=200,
-    max_depth=20,
-    min_samples_split=5,
-    class_weight="balanced",   # Critical: handles any class imbalance
+print("[*] Training Enterprise XGBoost Classifier...")
+# Compute sample weights to handle class imbalance
+sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
+
+model = xgb.XGBClassifier(
+    n_estimators=300,
+    max_depth=6,
+    learning_rate=0.1,
+    objective='multi:softprob',
     random_state=42,
-    n_jobs=-1                  # Use all CPU cores
+    n_jobs=-1
 )
-model.fit(X_train, y_train)
+model.fit(X_train, y_train, sample_weight=sample_weights)
 print("   Training complete!")
 
 # ── 5. Evaluate ───────────────────────────────────────────────────────────────
@@ -125,7 +130,7 @@ with open(MODELS_DIR / "tfidf_vectorizer_v4.pkl", "wb") as f:
 with open(MODELS_DIR / "label_encoder_v4.pkl", "wb") as f:
     pickle.dump(le, f)
 
-print("   Saved: models/model_nlp_v4.pkl")
+print("   Saved: models/model_nlp_v4.pkl (XGBoost)")
 print("   Saved: models/tfidf_vectorizer_v4.pkl")
 print("   Saved: models/label_encoder_v4.pkl")
-print("\n[DONE] Restart your API to use the new NLP-aware Engine 1.")
+print("\n[DONE] Restart your API to use the new Enterprise XGBoost Engine 1.")
