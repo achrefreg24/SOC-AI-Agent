@@ -21,6 +21,7 @@ import database
 from soc_agent import qualify_alert, build_system_prompt
 from scipy.sparse import hstack, csr_matrix
 import redis
+from sentence_transformers import SentenceTransformer
 
 # Initialisation de la base de donnees SQL
 database.init_db()
@@ -72,20 +73,14 @@ ENGINE1_ENABLED = True
 print("📂 Chargement du modele Machine Learning NLP (Engine 1)...")
 try:
     rf_model = pickle.load(open("models/model_nlp_v4.pkl", "rb"))
-    rf_tfidf = pickle.load(open("models/tfidf_vectorizer_v4.pkl", "rb"))
+    rf_encoder = SentenceTransformer("all-MiniLM-L6-v2")
     rf_le    = pickle.load(open("models/label_encoder_v4.pkl", "rb"))
-    print("✅ Engine 1 (Random Forest NLP v4) charge !")
+    print("✅ Engine 1 (Random Forest NLP v4 + Embeddings) charge !")
 except Exception as e:
-    print(f"⚠️ Modele NLP v4 introuvable, tentative avec l'ancien modele: {e}")
-    rf_tfidf = None
-    try:
-        rf_model = pickle.load(open("models/model_4_classes_v3.pkl", "rb"))
-        rf_le    = pickle.load(open("models/label_encoder_4_classes_v3.pkl", "rb"))
-        print("✅ Engine 1 (RandomForest v3 legacy) charge !")
-    except Exception as e2:
-        print(f"⚠️ Erreur de chargement du modele ML : {e2}")
-        rf_model = None
-        rf_le    = None
+    print(f"⚠️ Modele NLP v4 introuvable : {e}")
+    rf_model = None
+    rf_encoder = None
+    rf_le    = None
 
 
 def get_system_prompt() -> str:
@@ -356,9 +351,9 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
                 "alerts_per_minute": alerts_per_minute,
             }])
 
-            if rf_tfidf is not None:
-                text_features = rf_tfidf.transform([description])
-                X = hstack([csr_matrix(numeric_features.values), text_features])
+            if rf_encoder is not None:
+                text_features = rf_encoder.encode([description])
+                X = hstack([csr_matrix(numeric_features.values), csr_matrix(text_features)])
             else:
                 numeric_features["src_ip_encoded"] = 0
                 numeric_features["dst_ip_encoded"] = 0

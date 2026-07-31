@@ -18,28 +18,31 @@ import pandas as pd
 import pickle
 import numpy as np
 from pathlib import Path
-from sklearn.ensemble import GradientBoostingClassifier
 import xgboost as xgb
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import LabelEncoder
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.utils.class_weight import compute_sample_weight
-from scipy.sparse import hstack
+from scipy.sparse import hstack, csr_matrix
+from sentence_transformers import SentenceTransformer
+from sqlalchemy import create_engine
 
 # ── Config ────────────────────────────────────────────────────────────────────
-DATASET_PATH  = Path("dataset_ready_for_ai.csv")
+DB_URL = "postgresql+psycopg2://soc_user:soc_secret@localhost:5432/soc_db"
 MODELS_DIR    = Path("models")
 MODELS_DIR.mkdir(exist_ok=True)
 
 print("=" * 60)
-print("  ENGINE 1 RETRAINING — ENTERPRISE XGBOOST")
+print("  ENGINE 1 RETRAINING — ENTERPRISE XGBOOST + EMBEDDINGS")
 print("=" * 60)
 
 # ── 1. Load & Clean ───────────────────────────────────────────────────────────
-print("\n[*] Loading dataset...")
-df = pd.read_csv(DATASET_PATH).dropna(subset=["label", "description"])
+print("\n[*] Loading dataset from PostgreSQL...")
+engine = create_engine(DB_URL)
+# Pull only alerts that have been classified by the AI
+query = "SELECT timestamp, description, rule_level, ai_classification as label FROM alerts WHERE ai_classification IS NOT NULL"
+df = pd.read_sql(query, engine)
+df = df.dropna(subset=["label", "description"])
 print(f"   {len(df)} rows loaded.")
 print(f"   Label distribution:\n{df['label'].value_counts()}\n")
 
@@ -67,20 +70,14 @@ for col in NUMERIC_FEATURES:
 
 X_numeric = df[NUMERIC_FEATURES].fillna(0).values
 
-# NLP features: TF-IDF on description
-print("    Building TF-IDF matrix on alert descriptions...")
-tfidf = TfidfVectorizer(
-    max_features=300,           # Top 300 most informative words — keeps model fast
-    ngram_range=(1, 2),         # Unigrams and bigrams (captures "sql injection", "brute force")
-    stop_words="english",
-    min_df=2                    # Ignore words that appear < 2 times
-)
-X_text = tfidf.fit_transform(df["description"].fillna(""))
-print(f"   TF-IDF shape: {X_text.shape}")
+# NLP features: Dense Semantic Embeddings via MiniLM
+print("    Building Dense Semantic Embeddings on alert descriptions...")
+encoder = SentenceTransformer("all-MiniLM-L6-v2")
+X_text = encoder.encode(df["description"].fillna("").tolist(), show_progress_bar=True)
+print(f"   Embeddings shape: {X_text.shape}")
 
 # Combine numeric + NLP into one feature matrix
-from scipy.sparse import hstack, csr_matrix
-X_combined = hstack([csr_matrix(X_numeric), X_text])
+X_combined = hstack([csr_matrix(X_numeric), csr_matrix(X_text)])
 print(f"   Combined feature matrix shape: {X_combined.shape}")
 
 # ── 3. Train/Test Split ───────────────────────────────────────────────────────
@@ -125,12 +122,10 @@ print("[OK] Test  Accuracy: {:.2f}%".format(test_acc  * 100))
 print("\n[*] Saving models...")
 with open(MODELS_DIR / "model_nlp_v4.pkl", "wb") as f:
     pickle.dump(model, f)
-with open(MODELS_DIR / "tfidf_vectorizer_v4.pkl", "wb") as f:
-    pickle.dump(tfidf, f)
 with open(MODELS_DIR / "label_encoder_v4.pkl", "wb") as f:
     pickle.dump(le, f)
 
 print("   Saved: models/model_nlp_v4.pkl (XGBoost)")
-print("   Saved: models/tfidf_vectorizer_v4.pkl")
 print("   Saved: models/label_encoder_v4.pkl")
-print("\n[DONE] Restart your API to use the new Enterprise XGBoost Engine 1.")
+
+print("\n[DONE] Restart your API to use the new Enterprise XGBoost + Embeddings Engine 1.")
