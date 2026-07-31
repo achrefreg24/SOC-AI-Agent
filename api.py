@@ -34,6 +34,9 @@ app = FastAPI(
 DATASET_PATH = Path(r"dataset_ready_for_ai.csv")
 _system_prompt_cache = None
 
+# Engine 1 toggle — can be flipped at runtime via API without restarting uvicorn
+ENGINE1_ENABLED = True
+
 print("📂 Chargement du modele Machine Learning NLP (Engine 1)...")
 try:
     rf_model = pickle.load(open("models/model_nlp_v4.pkl", "rb"))
@@ -58,6 +61,35 @@ def get_system_prompt() -> str:
     if _system_prompt_cache is None:
         _system_prompt_cache = build_system_prompt()
     return _system_prompt_cache
+
+
+# ── Engine 1 Toggle Endpoints ─────────────────────────────────────────────────
+@app.get("/engine1/status", tags=["Engine Control"])
+def engine1_status():
+    """Check whether Engine 1 (Random Forest ML) is currently active."""
+    return {
+        "engine1_enabled": ENGINE1_ENABLED,
+        "message": "Engine 1 is ACTIVE — fast ML pre-filter running." if ENGINE1_ENABLED
+                   else "Engine 1 is DISABLED — all alerts go directly to Ollama (Engine 2)."
+    }
+
+
+@app.post("/engine1/enable", tags=["Engine Control"])
+def engine1_enable():
+    """Enable Engine 1 (Random Forest ML pre-filter). Takes effect immediately, no restart needed."""
+    global ENGINE1_ENABLED
+    ENGINE1_ENABLED = True
+    print("✅ Engine 1 ENABLED via API.")
+    return {"engine1_enabled": True, "message": "Engine 1 is now ACTIVE."}
+
+
+@app.post("/engine1/disable", tags=["Engine Control"])
+def engine1_disable():
+    """Disable Engine 1 — all alerts bypass ML and go straight to Ollama (Engine 2)."""
+    global ENGINE1_ENABLED
+    ENGINE1_ENABLED = False
+    print("⚠️  Engine 1 DISABLED via API. All alerts routed to Engine 2 (Ollama).")
+    return {"engine1_enabled": False, "message": "Engine 1 is now DISABLED. Engine 2 (Ollama) handles everything."}
 
 
 
@@ -269,10 +301,9 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
             threat_found = True
 
     # --- Engine 1 : ML Filter (RandomForest) ---
-    if not threat_found and not disable_ml and rf_model is not None and rf_le is not None:
+    if not threat_found and not disable_ml and ENGINE1_ENABLED and rf_model is not None and rf_le is not None:
         try:
             ts_clean = timestamp_str.replace("Z", "+00:00")
-            # Handle +0000 format (no colon)
             if ts_clean.endswith("+0000"):
                 ts_clean = ts_clean[:-5] + "+00:00"
             dt = datetime.fromisoformat(ts_clean)
@@ -305,17 +336,17 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
             rf_classe = rf_le.inverse_transform(rf_pred)[0]
             rf_proba  = max(rf_model.predict_proba(X)[0]) * 100
 
-            # FILTRE SUPERSONIQUE : Si le ML est certain que c'est benin
-            if rf_classe in ["Faux positif", "Informatif"] and rf_proba >= 90.0:
+            # SUPERSONIC FILTER: If ML is highly confident the alert is benign, short-circuit
+            if rf_classe in ["Faux positif", "Informatif", "False Positive", "Informational"] and rf_proba >= 90.0:
                 elapsed = time.time() - t0
                 result = {
-                    "analysis_context": "L'alerte a ete evaluee par le moteur Machine Learning (Engine 1) base sur le texte, l'heure et la frequence d'attaque.",
-                    "reasoning": f"[ENGINE 1] Filtre ML instantane (Confiance: {rf_proba:.1f}%, Temps: {elapsed:.3f}s). L'alerte correspond au profil classique de bruit de fond (Faux positif connu).",
+                    "analysis_context": f"Alert evaluated by Engine 1 (ML pre-filter) based on text, time, and attack frequency. Classification: {rf_classe} with {rf_proba:.1f}% confidence.",
+                    "reasoning": f"[ENGINE 1] Instant ML filter (Confidence: {rf_proba:.1f}%, Time: {elapsed:.3f}s). Alert matches a classic background noise profile. Bypassing Engine 2 (Ollama) to save compute.",
                     "confidence_score": int(rf_proba),
                     "classification": rf_classe,
-                    "attack_type": "Aucun",
+                    "attack_type": "None",
                     "mitre_tactic": "N/A",
-                    "recommandation": "Aucune action requise. Ignore par le pre-filtre IA.",
+                    "recommandation": "No action required. Filtered out by the ML pre-filter.",
                     "automated_action": {"execute": False, "action_type": None, "target": None}
                 }
 
@@ -329,7 +360,9 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
                 return result
 
         except Exception as e:
-            print(f"⚠️ Erreur Engine 1 : {e}")
+            print(f"⚠️ Engine 1 error: {e}")
+    elif ENGINE1_ENABLED is False:
+        print("[INFO] Engine 1 is DISABLED — skipping ML filter, routing directly to Ollama.")
 
     # --- Engine 2 : LLaMA 3 + Memory (Escalade) ---
     history = database.get_ip_history(src_ip)
