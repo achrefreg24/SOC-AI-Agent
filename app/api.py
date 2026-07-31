@@ -76,7 +76,7 @@ try:
     rf_model = pickle.load(open(BASE_DIR / "data/models/model_nlp_v4.pkl", "rb"))
     rf_encoder = SentenceTransformer("all-MiniLM-L6-v2")
     rf_le    = pickle.load(open(BASE_DIR / "data/models/label_encoder_v4.pkl", "rb"))
-    print("✅ Engine 1 (Random Forest NLP v4 + Embeddings) charge !")
+    print("✅ Engine 1 (Enterprise XGBoost NLP v4 + Embeddings) charge !")
 except Exception as e:
     print(f"⚠️ Modele NLP v4 introuvable : {e}")
     rf_model = None

@@ -14,7 +14,7 @@ import pandas as pd
 
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "llama3"
-VALID_LABELS = ["Critical", "Suspicious", "Informational", "False Positive"]
+VALID_LABELS = ["Critical", "Suspicious", "Faux positif"]
 
 RECOMMENDATIONS_BY_CLASS = {
     # Default recommendation if the LLM fails to provide actionable text.
@@ -22,16 +22,15 @@ RECOMMENDATIONS_BY_CLASS = {
                 "analyst, and preserve logs for forensic investigation.",
     "Suspicious": "Investigate manually within the next few hours: verify the "
                   "legitimacy of the source, correlate with other recent alerts.",
-    "Informational": "No action required. Archive for traceability.",
-    "False Positive": "No action required. Consider tuning the rule if "
-                      "this pattern repeats frequently (noise reduction).",
+    "Faux positif": "No action required. Consider tuning the SIEM rule if "
+                    "this pattern repeats frequently (noise reduction).",
 }
 
 
 def build_system_prompt() -> str:
     lines = [
         "You are a Senior Threat Hunter. For each Wazuh security alert, you must:",
-        "1. Classify it into EXACTLY one of these 4 categories: Critical, Suspicious, Informational, False Positive",
+        "1. Classify it into EXACTLY one of these 3 categories: Critical, Suspicious, Faux positif",
         "2. Identify the attack type (attack_type) explicitly (e.g., 'SSH Brute Force', 'SQL Injection', 'Trojan', or 'None' if False Positive).",
         "3. Provide a short, actionable recommendation for the SOC analyst.",
         "4. Provide an 'automated_action' ONLY if the alert is Critical.",
@@ -59,18 +58,17 @@ def build_system_prompt() -> str:
         "",
         "CLASSIFICATION 'Suspicious' ONLY if the attack is NOT confirmed (e.g., isolated port scan without Threat Intel).",
         "",
-        "Definitions:",
+        "Definitions (USE THESE EXACT LABELS, NO OTHER LABELS ALLOWED):",
         "- Critical: confirmed attack OR attack type in the list above. Automated action is MANDATORY.",
         "- Suspicious: anomalous activity not yet confirmed. NO automated action.",
-        "- Informational: normal tracking event, no risk.",
-        "- False Positive: legitimate traffic. MANDATORY recommendation: 'No action required.'",
+        "- Faux positif: legitimate traffic, normal event, or no risk. MANDATORY recommendation: 'No action required.' This replaces 'Informational' and 'False Positive' — use ONLY 'Faux positif' for both cases.",
         "",
         "Strict JSON format expected (DO NOT ADD ANY TEXT OUTSIDE THE JSON):",
         '{',
         '  "analysis_context": "<List the facts received: alert details, IP history, Threat Intel, and RAG context>",',
         '  "reasoning": "<Write your step-by-step reasoning based on the context above>",',
         '  "confidence_score": <1 to 100>,',
-        '  "classification": "<one of the 4 categories>",',
+        '  "classification": "<one of the 3 categories: Critical, Suspicious, Faux positif>",'
         '  "attack_type": "<Exact type of the attack>",',
         '  "mitre_tactic": "<MITRE ATT&CK ID, e.g., T1110>",',
         '  "recommandation": "<one sentence>",',
@@ -113,9 +111,9 @@ def build_system_prompt() -> str:
         "Expected Response:",
         "{",
         "  \"analysis_context\": \"The alert mentions a successful Dovecot authentication. Alert level 2 (very low). Internal IP. Business hours (09:00).\",",
-        "  \"reasoning\": \"A successful Dovecot authentication at 09:00 from an internal IP is a perfectly normal event. There are no threat indicators. I classify it as a False Positive.\",",
+        "  \"reasoning\": \"A successful Dovecot authentication at 09:00 from an internal IP is a perfectly normal event. There are no threat indicators. I classify it as Faux positif.\",",
         "  \"confidence_score\": 95,",
-        "  \"classification\": \"False Positive\",",
+        "  \"classification\": \"Faux positif\",",
         "  \"attack_type\": \"None\",",
         "  \"mitre_tactic\": \"N/A\",",
         "  \"recommandation\": \"No action required. Legitimate event.\",",
@@ -176,7 +174,6 @@ def qualify_alert(alert_data: dict, system_prompt: str, history: dict = None) ->
         r = requests.post(OLLAMA_URL, json=payload, timeout=300)
         r.raise_for_status()
         raw_answer = r.json()["message"]["content"].strip()
-        print(f"\n[DEBUG] OLLAMA RAW ANSWER:\n{raw_answer}\n")
         parsed = json.loads(raw_answer)
         analysis_context = parsed.get("analysis_context", "Context not provided").strip()
         reasoning = parsed.get("reasoning", "No reasoning provided").strip()
@@ -188,8 +185,12 @@ def qualify_alert(alert_data: dict, system_prompt: str, history: dict = None) ->
         classification = parsed.get("classification", "").strip()
         attack_type = parsed.get("attack_type", "Unknown").strip()
         mitre_tactic = parsed.get("mitre_tactic", "Unknown").strip()
-        recommandation = parsed.get("recommandation", "").strip()
+        recommandation = parsed.get("recommandation", parsed.get("recommendation", "")).strip()
         action = parsed.get("automated_action", {"execute": False, "action_type": None, "target": None})
+
+        # ── Label Remapping: merge old labels into "Faux positif" ─────
+        if classification in ("Informational", "False Positive", "Faux Positif", "false positive"):
+            classification = "Faux positif"
         
         # PYTHON SAFETY OVERRIDE
         if action.get("execute") and confidence_score < 85:
@@ -206,7 +207,7 @@ def qualify_alert(alert_data: dict, system_prompt: str, history: dict = None) ->
         if not recommandation or recommandation.startswith("ERROR"):
             recommandation = RECOMMENDATIONS_BY_CLASS.get(classification, "Manual verification required.")
         
-        return {
+        result = {
             "analysis_context": analysis_context,
             "reasoning": reasoning,
             "confidence_score": confidence_score,
@@ -216,6 +217,24 @@ def qualify_alert(alert_data: dict, system_prompt: str, history: dict = None) ->
             "recommandation": recommandation,
             "automated_action": action
         }
+
+        # ── Clean Server Log ──────────────────────────────────────────
+        action_icon = "🚨 AUTO-ACTION" if action.get("execute") else "📋 No action"
+        print(f"\n{'='*70}")
+        print(f"🧠 [ENGINE 2] {classification} ({confidence_score}%) | {attack_type} | {mitre_tactic} | {action_icon}")
+        print(f"   💬 Reasoning: {reasoning[:250]}")
+        print(f"   📤 Response sent back to N8N:")
+        print(f"      Classification : {classification}")
+        print(f"      Confidence     : {confidence_score}%")
+        print(f"      Attack Type    : {attack_type}")
+        print(f"      MITRE Tactic   : {mitre_tactic}")
+        print(f"      Recommendation : {recommandation[:150]}")
+        print(f"      Action Execute : {action.get('execute')}")
+        print(f"      Action Type    : {action.get('action_type')}")
+        print(f"      Target         : {action.get('target')}")
+        print(f"{'='*70}")
+
+        return result
     except Exception as e:
         action = {"execute": False, "action_type": None, "target": None}
         return {
