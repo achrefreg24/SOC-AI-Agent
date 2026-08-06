@@ -6,8 +6,7 @@ Trains a new, smarter Engine 1 model that understands BOTH:
   - NLP text features (TF-IDF on the Wazuh description)
 
 This produces two new model files:
-  - models/model_nlp_v4.pkl         (the NLP-aware Random Forest)
-  - models/tfidf_vectorizer_v4.pkl  (the TF-IDF vectorizer — must be saved too!)
+  - models/model_nlp_v4.pkl         (the NLP-aware XGBoost Classifier)
   - models/label_encoder_v4.pkl     (the label encoder)
 
 Run this ONCE from the 'combined work ai soc' folder:
@@ -43,7 +42,16 @@ engine = create_engine(DB_URL)
 query = "SELECT timestamp, description, rule_level, ai_classification as label FROM alerts WHERE ai_classification IS NOT NULL"
 df = pd.read_sql(query, engine)
 df = df.dropna(subset=["label", "description"])
-print(f"   {len(df)} rows loaded.")
+print(f"   {len(df)} rows loaded (before rare-label filter).")
+
+# Drop labels with fewer than 5 samples to prevent stratify crash
+value_counts = df['label'].value_counts()
+rare_labels = value_counts[value_counts < 5].index.tolist()
+if rare_labels:
+    print(f"   [!] Dropping rare labels (< 5 samples): {rare_labels}")
+    df = df[~df['label'].isin(rare_labels)]
+
+print(f"   {len(df)} rows after rare-label filter.")
 print(f"   Label distribution:\n{df['label'].value_counts()}\n")
 
 # ── 2. Feature Engineering ────────────────────────────────────────────────────

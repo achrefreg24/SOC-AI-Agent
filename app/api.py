@@ -2,8 +2,8 @@
 api.py
 ------
 API FastAPI qui expose l'architecture unifiée "Dual-Engine" SOC AI.
-Engine 1: RandomForest (filtrage supersonique des faux positifs)
-Engine 2: LLaMA 3 + SQLite (analyse approfondie et mémorisation contextuelle)
+Engine 1: XGBoost + MiniLM Embeddings (filtrage supersonique des faux positifs)
+Engine 2: LLaMA 3 via Ollama (analyse approfondie et mémorisation contextuelle)
 """
 
 from fastapi import FastAPI, HTTPException
@@ -47,7 +47,7 @@ def get_redis_alerts_per_minute(src_ip: str) -> int:
     try:
         pipe = redis_client.pipeline()
         pipe.zremrangebyscore(key, 0, window_start) # Remove old entries
-        pipe.zadd(key, {str(current_time): current_time}) # Add new entry
+        pipe.zadd(key, {f"{current_time}_{time.time_ns()}": current_time}) # Add new entry (unique member prevents collisions)
         pipe.zcard(key) # Count entries in window
         pipe.expire(key, 60) # Auto-cleanup
         results = pipe.execute()
