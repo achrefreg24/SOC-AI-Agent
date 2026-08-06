@@ -69,6 +69,7 @@ _system_prompt_cache = None
 
 # Engine 1 toggle — can be flipped at runtime via API without restarting uvicorn
 ENGINE1_ENABLED = True
+DEBUG_VERBOSE = False  # Toggle verbose Ollama debug output
 
 print("📂 Chargement du modele Machine Learning NLP (Engine 1)...")
 BASE_DIR = Path(__file__).parent.parent
@@ -118,6 +119,29 @@ def engine1_disable():
     ENGINE1_ENABLED = False
     print("⚠️  Engine 1 DISABLED via API. All alerts routed to Engine 2 (Ollama).")
     return {"engine1_enabled": False, "message": "Engine 1 is now DISABLED. Engine 2 (Ollama) handles everything."}
+
+
+@app.post("/debug/enable", tags=["Debug"])
+def debug_enable():
+    """Enable verbose debug logging — shows raw Ollama JSON output in server terminal."""
+    global DEBUG_VERBOSE
+    DEBUG_VERBOSE = True
+    print("🔍 DEBUG MODE ENABLED — Raw Ollama output will be shown.")
+    return {"debug_verbose": True, "message": "Verbose debug logging is now ON."}
+
+
+@app.post("/debug/disable", tags=["Debug"])
+def debug_disable():
+    """Disable verbose debug logging."""
+    global DEBUG_VERBOSE
+    DEBUG_VERBOSE = False
+    print("🔇 DEBUG MODE DISABLED — Clean output only.")
+    return {"debug_verbose": False, "message": "Verbose debug logging is now OFF."}
+
+
+@app.get("/debug/status", tags=["Debug"])
+def debug_status():
+    return {"debug_verbose": DEBUG_VERBOSE}
 
 
 

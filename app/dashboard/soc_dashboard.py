@@ -86,7 +86,7 @@ st.caption(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 if error:
     st.error(f"❌ Cannot connect to PostgreSQL: {error}")
-    st.code("docker run --name soc-postgres -e POSTGRES_PASSWORD=soc_secret -e POSTGRES_DB=soc_db -e POSTGRES_USER=soc_user -p 5432:5432 -d postgres:15")
+    st.info("Make sure your local Windows PostgreSQL service is running (pg_ctl) and the database 'soc_db' exists.")
     st.stop()
 
 if df.empty:

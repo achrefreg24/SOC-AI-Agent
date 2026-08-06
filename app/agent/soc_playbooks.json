@@ -40,5 +40,96 @@
         "triggers": ["exfiltration", "large data transfer", "unusual outbound", "DNS tunneling"],
         "mitre_tactic": "T1048 - Exfiltration Over Alternative Protocol",
         "procedure": "1. Identify the destination IP and block outbound connections immediately (firewall-drop). 2. Use DLP logs to identify what data was stolen (PCI/PII/Intellectual Property). 3. Isolate the internal machine leaking data (wazuh-isolate-endpoint). 4. Initiate Data Breach Legal Protocol if PII is confirmed leaked."
+    },
+    {
+        "id": "PB-007",
+        "name": "Phishing / Credential Harvesting",
+        "triggers": ["phishing", "credential harvest", "suspicious email", "spoofed domain"],
+        "mitre_tactic": "T1566 - Phishing",
+        "procedure": "1. Quarantine the suspicious email from all recipient mailboxes via email gateway API. 2. Check if any user clicked the malicious link or opened the attachment (mail trace logs). 3. If credentials were submitted, force immediate password reset and revoke active sessions for affected users. 4. Block the sender domain and associated URLs at the email gateway and web proxy (firewall-drop). 5. Submit phishing indicators (URLs, hashes, sender domain) to threat intelligence platform."
+    },
+    {
+        "id": "PB-008",
+        "name": "Malware / Trojan Detection",
+        "triggers": ["malware", "trojan", "virus", "suspicious binary", "antivirus alert"],
+        "mitre_tactic": "T1204 - User Execution",
+        "procedure": "1. Isolate the affected endpoint immediately to prevent lateral spread (wazuh-isolate-endpoint). 2. Collect a volatile memory dump from the endpoint for forensic analysis. 3. Scan the suspicious binary and endpoint filesystem with YARA rules to identify malware family. 4. Check network logs for outbound C2 connections from the infected host and block identified C2 IPs (firewall-drop). 5. Remediate by removing malicious artifacts, restoring from clean backup if necessary, and re-image endpoint if persistence is confirmed."
+    },
+    {
+        "id": "PB-009",
+        "name": "Privilege Escalation",
+        "triggers": ["privilege escalation", "sudo su", "/etc/shadow", "unauthorized root", "CVE exploit"],
+        "mitre_tactic": "T1548 - Abuse Elevation Control Mechanism",
+        "procedure": "1. Immediately kill the suspicious process performing the privilege escalation attempt. 2. Revoke elevated privileges and disable the compromised user account. 3. Audit the sudoers file and local admin group for unauthorized modifications. 4. Identify and patch the exploited vulnerability (CVE) on the affected system and all similarly configured hosts. 5. Review authentication and process execution logs to determine the full scope of compromise."
+    },
+    {
+        "id": "PB-010",
+        "name": "Command and Control (C2) Beaconing",
+        "triggers": ["C2", "beaconing", "periodic outbound", "Cobalt Strike", "Meterpreter", "port 4444"],
+        "mitre_tactic": "T1071 - Application Layer Protocol",
+        "procedure": "1. Block the identified C2 IP/domain at the perimeter firewall and DNS sinkhole immediately (firewall-drop). 2. Isolate the beaconing endpoint from the network (wazuh-isolate-endpoint). 3. Analyze beacon intervals, jitter patterns, and payload sizes to identify the C2 framework in use. 4. Hunt across all endpoints for matching persistence mechanisms (scheduled tasks, registry run keys, startup items). 5. Perform full forensic analysis on the isolated endpoint to determine initial access vector and dwell time."
+    },
+    {
+        "id": "PB-011",
+        "name": "Web Shell / Backdoor",
+        "triggers": ["web shell", "backdoor", "suspicious PHP", "jsp upload", "reverse shell"],
+        "mitre_tactic": "T1505 - Server Software Component",
+        "procedure": "1. Remove the identified web shell file from the web server immediately and take a forensic copy. 2. Audit web server access logs to identify the initial upload vector and all commands executed through the web shell. 3. Check for additional persistence mechanisms (cron jobs, scheduled tasks, secondary web shells, modified binaries). 4. Rotate all web server credentials, service account passwords, and API keys. 5. Patch the vulnerability that allowed the initial upload (file upload bypass, RCE, etc.)."
+    },
+    {
+        "id": "PB-012",
+        "name": "Insider Threat / Data Theft",
+        "triggers": ["insider threat", "unauthorized access", "data download", "USB mass storage", "after hours access"],
+        "mitre_tactic": "T1052 - Exfiltration Over Physical Medium",
+        "procedure": "1. Review DLP (Data Loss Prevention) logs to identify what data was accessed or transferred. 2. Check USB device connection logs and endpoint agent telemetry for mass storage device usage. 3. Coordinate with HR and Legal to conduct an employee interview following proper insider threat protocols. 4. Preserve the full evidence chain (disk images, log exports, email archives) for potential legal proceedings. 5. Restrict the suspect's access permissions and monitor their account activity in real-time pending investigation outcome."
+    },
+    {
+        "id": "PB-013",
+        "name": "IDS/IPS Alert (Suricata/Snort)",
+        "triggers": ["Suricata", "Snort", "IDS alert", "IPS alert", "network intrusion", "signature match"],
+        "mitre_tactic": "T1040 - Network Sniffing",
+        "procedure": "1. Verify whether the triggered signature corresponds to actual exploit traffic or is a false positive by examining the full packet payload. 2. Check the payload content against known exploit patterns and compare with the targeted service version for applicability. 3. Correlate the alert with threat intelligence feeds (STIX/TAXII, MISP) to determine if the source IP is a known malicious actor. 4. If confirmed malicious, block the source IP at the perimeter firewall (firewall-drop) and add to the blocklist. 5. Update IDS/IPS rule tuning to reduce false positive rate and ensure detection coverage for the identified attack vector."
+    },
+    {
+        "id": "PB-014",
+        "name": "Account Compromise / Impossible Travel",
+        "triggers": ["impossible travel", "MFA bypass", "account compromise", "concurrent logins", "geographic anomaly"],
+        "mitre_tactic": "T1078 - Valid Accounts",
+        "procedure": "1. Immediately disable the compromised user account in Active Directory / Identity Provider. 2. Force a password reset and require MFA re-enrollment for the affected account. 3. Revoke all active sessions, OAuth tokens, and API keys associated with the compromised account. 4. Audit recent account activity to identify any data access, email forwarding rules, or configuration changes made by the attacker. 5. Investigate the authentication logs to determine the compromise method (credential stuffing, phishing, token theft) and remediate the root cause."
+    },
+    {
+        "id": "PB-FP-001",
+        "name": "Authorized Vulnerability Scan",
+        "triggers": ["Nessus", "Qualys", "OpenVAS", "Authorized Scanner"],
+        "mitre_tactic": "N/A",
+        "procedure": "1. Check the source IP. 2. If the IP is known to belong to the IT Security Team or authorized external auditor, this is expected behavior. 3. CLASSIFY AS FAUX POSITIF. Do not block the IP. If the scanner is unknown, escalate to Suspicious."
+    },
+    {
+        "id": "PB-FP-002",
+        "name": "Routine Sysadmin Maintenance",
+        "triggers": ["SSH Login Success", "Jump Host", "sudo apt", "df -h", "htop"],
+        "mitre_tactic": "N/A",
+        "procedure": "1. Check if the login originated from the official Corporate VPN or Jump Host IPs (e.g., 192.168.1.10). 2. Verify that commands executed are routine maintenance (top, df, systemctl). 3. If no destructive commands or lateral movement is observed, CLASSIFY AS FAUX POSITIF."
+    },
+    {
+        "id": "PB-FP-003",
+        "name": "Normal DNS Traffic",
+        "triggers": ["DNS lookup", "TXT record", "A record"],
+        "mitre_tactic": "N/A",
+        "procedure": "1. Verify if the DNS query volume is within normal baseline limits. 2. Check if the queried domains are known good (e.g., microsoft.com, google.com). 3. If volume is low and domains are benign, CLASSIFY AS FAUX POSITIF."
+    },
+    {
+        "id": "PB-FP-004",
+        "name": "Expected Business Application Behavior",
+        "triggers": ["backup job", "database sync", "high volume internal"],
+        "mitre_tactic": "N/A",
+        "procedure": "1. Identify the source and destination IP. 2. If traffic is between the DB server and Backup server during scheduled backup windows (e.g., 02:00 AM), CLASSIFY AS FAUX POSITIF."
+    },
+    {
+        "id": "PB-FP-005",
+        "name": "Web Crawler / Search Engine Bot",
+        "triggers": ["Googlebot", "Bingbot", "high frequency HTTP requests", "robots.txt"],
+        "mitre_tactic": "N/A",
+        "procedure": "1. Verify the User-Agent and perform a reverse DNS lookup to confirm the IP actually belongs to Google/Bing. 2. If confirmed as a legitimate search engine indexing the public site, CLASSIFY AS FAUX POSITIF."
     }
 ]

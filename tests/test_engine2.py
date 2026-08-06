@@ -217,7 +217,7 @@ for scenario in scenarios:
         print(f"ERROR ({elapsed}s): {err}")
         results.append({"scenario": scenario["name"], "result": None, "elapsed": elapsed, "error": err})
     
-    print("⏳ Giving the local AI 3 seconds to cool down...")
+    print("⏳ Giving the local AI 3 seconds to cool down...\n")
     time.sleep(3)
 
 print("\n" + "=" * 60)

@@ -15,6 +15,7 @@ import pandas as pd
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "llama3"
 VALID_LABELS = ["Critical", "Suspicious", "Faux positif"]
+DEBUG_MODE = True  # Set to False to disable the detailed terminal logs
 
 RECOMMENDATIONS_BY_CLASS = {
     # Default recommendation if the LLM fails to provide actionable text.
@@ -36,8 +37,8 @@ def build_system_prompt() -> str:
         "4. Provide an 'automated_action' ONLY if the alert is Critical.",
         "",
         "MANDATORY SECURITY RULES FOR AUTOMATED ACTION (STRICT COMPLIANCE REQUIRED):",
-        "RULE 1 - INTERNAL IP: If src_ip starts with '192.168.', '10.', or '172.16.' -> the IP is INTERNAL. 'firewall-drop' is FORBIDDEN. 'wazuh-isolate-endpoint' is MANDATORY.",
-        "RULE 2 - EXTERNAL IP: If src_ip does NOT start with '192.168.', '10.', or '172.16.' -> the IP is EXTERNAL. 'firewall-drop' is MANDATORY. 'wazuh-isolate-endpoint' is FORBIDDEN.",
+        "RULE 1 - INTERNAL IP: If src_ip starts with '10.', '192.168.', '127.', or any of ('172.16.', '172.17.', '172.18.', '172.19.', '172.20.', '172.21.', '172.22.', '172.23.', '172.24.', '172.25.', '172.26.', '172.27.', '172.28.', '172.29.', '172.30.', '172.31.') -> the IP is INTERNAL. For Internal IPs, 'firewall-drop' is FORBIDDEN. You MUST use 'wazuh-isolate-endpoint'.",
+        "RULE 2 - EXTERNAL IP: If src_ip does NOT match any of the exact prefixes above -> the IP is EXTERNAL. For External IPs, 'wazuh-isolate-endpoint' is STRICTLY FORBIDDEN. You MUST use 'firewall-drop'.",
         "RULE 3 - NO IP: If src_ip is null or missing -> use 'action_type': null and 'execute': false.",
         "RULE 4 - TIME: Always analyze the 'timestamp'. Normal business hours: 08:00 - 18:00. Activity outside these hours is more suspicious.",
         "THESE RULES ARE ABSOLUTE. They apply to ALL Critical alerts, even if OpenCTI has no match.",
@@ -207,6 +208,13 @@ def qualify_alert(alert_data: dict, system_prompt: str, history: dict = None) ->
         if not recommandation or recommandation.startswith("ERROR"):
             recommandation = RECOMMENDATIONS_BY_CLASS.get(classification, "Manual verification required.")
         
+        # ── Fix Ugly Attack Types (Dashboard Aesthetics) ──────────────
+        if attack_type.lower() in ("none", "none ( unknown )", "n/a", "unknown", "null"):
+            if classification in ("Critical", "Suspicious"):
+                attack_type = "Unspecified Threat"
+            else:
+                attack_type = "N/A"
+
         result = {
             "analysis_context": analysis_context,
             "reasoning": reasoning,
@@ -218,21 +226,22 @@ def qualify_alert(alert_data: dict, system_prompt: str, history: dict = None) ->
             "automated_action": action
         }
 
-        # ── Clean Server Log ──────────────────────────────────────────
-        action_icon = "🚨 AUTO-ACTION" if action.get("execute") else "📋 No action"
-        print(f"\n{'='*70}")
-        print(f"🧠 [ENGINE 2] {classification} ({confidence_score}%) | {attack_type} | {mitre_tactic} | {action_icon}")
-        print(f"   💬 Reasoning: {reasoning[:250]}")
-        print(f"   📤 Response sent back to N8N:")
-        print(f"      Classification : {classification}")
-        print(f"      Confidence     : {confidence_score}%")
-        print(f"      Attack Type    : {attack_type}")
-        print(f"      MITRE Tactic   : {mitre_tactic}")
-        print(f"      Recommendation : {recommandation[:150]}")
-        print(f"      Action Execute : {action.get('execute')}")
-        print(f"      Action Type    : {action.get('action_type')}")
-        print(f"      Target         : {action.get('target')}")
-        print(f"{'='*70}")
+        # ── Clean Server Log (Toggleable) ─────────────────────────────
+        if DEBUG_MODE:
+            action_icon = "🚨 AUTO-ACTION" if action.get("execute") else "📋 No action"
+            print(f"\n{'='*70}")
+            print(f"🧠 [ENGINE 2] {classification} ({confidence_score}%) | {attack_type} | {mitre_tactic} | {action_icon}")
+            print(f"   💬 Reasoning: {reasoning[:350]}")
+            print(f"   📤 Response sent back to N8N:")
+            print(f"      Classification : {classification}")
+            print(f"      Confidence     : {confidence_score}%")
+            print(f"      Attack Type    : {attack_type}")
+            print(f"      MITRE Tactic   : {mitre_tactic}")
+            print(f"      Recommendation : {recommandation[:150]}")
+            print(f"      Action Execute : {action.get('execute')}")
+            print(f"      Action Type    : {action.get('action_type')}")
+            print(f"      Target         : {action.get('target')}")
+            print(f"{'='*70}")
 
         return result
     except Exception as e:
