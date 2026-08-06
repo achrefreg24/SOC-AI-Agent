@@ -39,7 +39,7 @@ print("=" * 60)
 print("\n[*] Loading dataset from PostgreSQL...")
 engine = create_engine(DB_URL)
 # Pull only alerts that have been classified by the AI
-query = "SELECT timestamp, description, rule_level, ai_classification as label FROM alerts WHERE ai_classification IS NOT NULL"
+query = "SELECT timestamp, description, rule_level, ai_classification as label, alerts_per_minute FROM alerts WHERE ai_classification IS NOT NULL"
 df = pd.read_sql(query, engine)
 df = df.dropna(subset=["label", "description"])
 print(f"   {len(df)} rows loaded (before rare-label filter).")
@@ -63,7 +63,7 @@ df["hour"]        = dt_series.dt.hour
 df["day_of_week"] = dt_series.dt.dayofweek
 df["month"]       = dt_series.dt.month
 df["is_weekend"]  = (df["day_of_week"] >= 5).astype(int)
-df["alerts_per_minute"] = df.get("alerts_per_minute", 0)  # default 0 if missing
+# df["alerts_per_minute"] is now coming directly from PostgreSQL!
 
 # Encode labels
 le = LabelEncoder()

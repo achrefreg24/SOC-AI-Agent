@@ -270,6 +270,10 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
     except (ValueError, TypeError):
         level = 5
 
+    # Determine velocity feature right away so it can be saved
+    ip_str = src_ip or ""
+    alerts_per_minute = get_redis_alerts_per_minute(ip_str)
+
     # --- Detection Threat Intel (BYPASS RULE) ---
     threat_found = False
 
@@ -364,9 +368,6 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
             month = dt.month
             is_weekend = 1 if day_of_week >= 5 else 0
 
-            ip_str = src_ip or ""
-            alerts_per_minute = get_redis_alerts_per_minute(ip_str)
-
             numeric_features = pd.DataFrame([{
                 "rule_level": level,
                 "hour": hour,
@@ -411,7 +412,8 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
                     rule_level=level,
                     ai_confidence=rf_proba,
                     mitre_tactic="N/A",
-                    engine_used="Engine1"
+                    engine_used="Engine1",
+                    alerts_per_minute=alerts_per_minute
                 )
                 return result
 
@@ -446,7 +448,8 @@ async def qualifier_alerte(request: Request, disable_ml: bool = False):
         rule_level=level,
         ai_confidence=result.get("confidence_score", 0.0),
         mitre_tactic=result.get("mitre_tactic", "N/A"),
-        engine_used="Engine2"
+        engine_used="Engine2",
+        alerts_per_minute=alerts_per_minute
     )
 
     return result

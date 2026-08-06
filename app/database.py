@@ -48,6 +48,7 @@ class Alert(Base):
     mitre_tactic     = Column(String(128), nullable=True)
     action_executed  = Column(Text, nullable=True)
     engine_used      = Column(String(16), nullable=True)
+    alerts_per_minute = Column(Integer, default=0)
 
     # Composite index for fast IP + time lookups (the hot query path)
     __table_args__ = (
@@ -71,7 +72,8 @@ def save_alert(
     rule_level: int = None,
     ai_confidence: float = None,
     mitre_tactic: str = None,
-    engine_used: str = "Engine2"
+    engine_used: str = "Engine2",
+    alerts_per_minute: int = 0
 ):
     """Persist a processed alert to PostgreSQL."""
     if src_ip in [None, "None", "nan", "N/A", ""]:
@@ -87,7 +89,8 @@ def save_alert(
         ai_confidence=ai_confidence,
         mitre_tactic=mitre_tactic,
         action_executed=str(action_executed),
-        engine_used=engine_used
+        engine_used=engine_used,
+        alerts_per_minute=alerts_per_minute
     )
     try:
         with Session(engine) as session:
@@ -170,7 +173,8 @@ def get_all_alerts_df():
                 "ai_confidence": r.ai_confidence,
                 "mitre_tactic": r.mitre_tactic,
                 "action_executed": r.action_executed,
-                "engine_used": r.engine_used
+                "engine_used": r.engine_used,
+                "alerts_per_minute": r.alerts_per_minute
             })
         return pd.DataFrame(data)
     except Exception as e:
